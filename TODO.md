@@ -43,9 +43,9 @@
 - [ ] 阶段 5 飞书/知识库消息上镜:先查上游 Android 主动通知现状,再定实现方式
 - [ ] 阶段 6 语音备忘录转写 → Obsidian(2026-10-16 Bill 提出)。上游现状:Android 插件 `RecordingExports.java` 只读扫描官方 App 落盘的音频(m4a/wav/opus…)与 .md/.txt,走系统分享;**官方数据库里的转写文字上游未适配**(「全天智记数据库转写导出未移植」),上游 roadmap「NAS/Obsidian 自动入库未完成」。不依赖眼镜固件
   - [x] 2026-10-18 Bill 答:vault = 本机 `~/Obsidian/第二大脑`,Obsidian Sync 官方无头客户端(`ob sync --continuous`,LaunchAgent com.dyb.obsidian-sync)同步到另一台 Mac 和安卓手机。**写仓库的唯一出口已有:suiji-bot `app/vault.py`**(飞书私聊「随记机器人」→ 随记/文章/复盘),规范见 vault `_约定.md`
-  - [ ] 定案:走「手机系统分享 → 飞书私聊随记机器人 → suiji-bot → 随记」,不另建同步目录 watcher。理由:复用现成出口与回执、不限局域网、随记 `## HH:MM 标题` 小节天然适合语音备忘
-  - [ ] suiji-bot 侧(在那个项目做,先改它的 CLAUDE.md):①新增 `audio` 消息与音频文件(m4a/wav/opus/mp3)处理:原件存 `附件/YYYY/`,本机转写(优先 Apple Speech 框架经 pyobjc,与 OCR 用 Apple Vision 同一思路、免 Key;不行再 whisper),追加当日随记 `## HH:MM 语音备忘:<claude 起题>` + 正文 + `![[音频]]`;②`file` 为 .txt/.md 且内容短或文件名含「录音/转写/TurboIO」时按语音转写追加随记,不走文章分类。**2026-10-19 实测:官方 1.0.6「分享录音文件」发出的是 `VoiceMemo YYYY-MM-DD HH MM.mp3`(audio/mpeg),文件名可作识别规则;到飞书是 audio 还是 file 消息待实测**。vault `_约定.md` 加一行「语音备忘进随记,音频原件进附件」
-  - [ ] 眼镜侧(刷完 APK 后实测):插件「导出」页能看到什么——官方 App 是否把转写落成 txt/md;分享给飞书「随记机器人」到底是 audio 还是 file 消息,决定上面①②哪条生效
+  - [x] 定案:走「手机系统分享 → 飞书私聊随记机器人 → suiji-bot → 随记」,不另建同步目录 watcher。理由:复用现成出口与回执、不限局域网、随记 `## HH:MM 标题` 小节天然适合语音备忘
+  - [x] suiji-bot 侧 **2026-10-18 已在那个项目做完**(本条此前未回填):`app/stt.py` apple/whisper 双后端、processor 三条分支、vault `_约定.md` 已加规则。2026-10-19:单测 8 过,重启服务载入新代码;Bill 开了系统听写,Apple 后端对真录音 0.6 s 出字(whisper 兜底把「螺纹钢/仓单」听成「罗文刚/仓丹」,期货词汇只能靠 Apple)。原计划:①新增 `audio` 消息与音频文件(m4a/wav/opus/mp3)处理:原件存 `附件/YYYY/`,本机转写(优先 Apple Speech 框架经 pyobjc,与 OCR 用 Apple Vision 同一思路、免 Key;不行再 whisper),追加当日随记 `## HH:MM 语音备忘:<claude 起题>` + 正文 + `![[音频]]`;②`file` 为 .txt/.md 且内容短或文件名含「录音/转写/TurboIO」时按语音转写追加随记,不走文章分类。**2026-10-19 实测:官方 1.0.6「分享录音文件」发出的是 `VoiceMemo YYYY-MM-DD HH MM.mp3`(audio/mpeg),文件名可作识别规则;到飞书是 audio 还是 file 消息待实测**。vault `_约定.md` 加一行「语音备忘进随记,音频原件进附件」
+  - [x] 眼镜侧实测(2026-10-19):插件导出页在 1.0.6 扫不到音频;官方 App「分享录音文件」→ 飞书是 **file 消息**(`VoiceMemo 2026-10-19 15 16.mp3`,audio/mpeg),走 ① 音频文件分支:原件进 `附件/2026/`,当日随记新增 `## 15:59 语音备忘:我是谁的自我追问` + 转写 + `![[mp3]]`。**阶段 6 链路走通**。官方 App 转写文本是否可分享为 txt 未测(② 分支待用例)
   - [ ] 自动化(可选,后做):手机 MacroDroid 盯官方 App 录音目录自动分享;或第二阶段改插件加「一键发随记」
 - [ ] 可选:上游另有 `knowledge_query` 工具位(手机 → HTTPS `/api/turbo-knowledge` → 电脑只读检索,Android 端到端上游未验收),若想让眼镜查 futures-kb / 微信归档,可把 `official-addon/knowledge-bridge` 的接口换成 Hermes 或 futures-kb 实现
 

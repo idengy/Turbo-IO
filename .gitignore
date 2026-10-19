@@ -34,3 +34,9 @@
 **/.idea/
 **/local.properties
 /harmony-sdk/build-profile.json5
+
+# Bill 本机私有(安装包、token、Key 副本),见 CLAUDE.md
+local/
+
+# REA 项目级 MCP 配置含本机绝对路径,不进 git(2026-10-18)
+/.mcp.json

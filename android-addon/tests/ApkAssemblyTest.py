@@ -32,4 +32,24 @@ class AssemblyTest(unittest.TestCase):
             failure = subprocess.run(['python3',str(ROOT/'assemble_apk.py'),str(source),str(assembled),str(addon),str(source)],capture_output=True)
             self.assertNotEqual(failure.returncode,0)
 
+    def test_addon_dex_takes_next_free_slot_when_classes4_exists(self):
+        with tempfile.TemporaryDirectory(prefix='turbo-apk-test-') as temporary:
+            root = pathlib.Path(temporary)
+            source, assembled, addon, output = [root / x for x in ('source.apk','assembled.apk','addon.dex','output.apk')]
+            files = {'classes.dex': b'dex\n1', 'classes2.dex': b'dex\n2', 'classes3.dex': b'dex\n3',
+                     'classes4.dex': b'dex\n4', 'AndroidManifest.xml': b'manifest'}
+            with zipfile.ZipFile(source, 'w') as archive:
+                for name, data in files.items(): archive.writestr(name, data)
+            with zipfile.ZipFile(assembled, 'w') as archive: archive.writestr('classes2.dex', b'dex\npatched')
+            addon.write_bytes(b'dex\naddon')
+            subprocess.run(['python3',str(ROOT/'assemble_apk.py'),str(source),str(assembled),str(addon),str(output)],check=True,capture_output=True)
+            with zipfile.ZipFile(output) as archive:
+                self.assertEqual(archive.read('classes4.dex'), b'dex\n4')
+                self.assertEqual(archive.read('classes5.dex'), b'dex\naddon')
+            subprocess.run(['python3',str(ROOT/'verify_apk.py'),str(source),str(output)],check=True,capture_output=True)
+            with zipfile.ZipFile(assembled, 'w') as archive:
+                archive.writestr('classes2.dex', b'dex\npatched'); archive.writestr('classes5.dex', b'dex\nstray')
+            failure = subprocess.run(['python3',str(ROOT/'assemble_apk.py'),str(source),str(assembled),str(addon),str(root/'other.apk')],capture_output=True)
+            self.assertNotEqual(failure.returncode,0)
+
 if __name__ == '__main__': unittest.main()

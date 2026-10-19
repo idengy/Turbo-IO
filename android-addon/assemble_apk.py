@@ -22,10 +22,16 @@ temporary = destination.with_suffix('.assembling.apk')
 if temporary.exists():
     raise SystemExit('Temporary output exists; inspect before retrying')
 with zipfile.ZipFile(source) as original, zipfile.ZipFile(assembled) as modified:
-    if 'classes4.dex' in original.namelist():
-        raise SystemExit('Addon DEX collision')
     if len(original.namelist()) != len(set(original.namelist())):
         raise SystemExit('Duplicate original ZIP members')
+    # The host may already ship classes4.dex (1.0.6 does); use the next free Android DEX slot of the
+    # original package. verify_apk.py derives the same slot from the original alone.
+    n = 2
+    while f'classes{n}.dex' in original.namelist():
+        n += 1
+    addon_name = f'classes{n}.dex'
+    if addon_name in modified.namelist():
+        raise SystemExit('Addon DEX collision')
     if set(extra) & set(original.namelist()):
         raise SystemExit('Addon asset collision')
     patched = modified.read('classes2.dex')
@@ -38,7 +44,7 @@ with zipfile.ZipFile(source) as original, zipfile.ZipFile(assembled) as modified
             content = patched if info.filename == 'classes2.dex' else original.read(info)
             if extra and info.filename == 'AndroidManifest.xml': content = patch_manifest(content)
             output.writestr(info, content)
-        info = zipfile.ZipInfo('classes4.dex', (2026, 9, 26, 0, 0, 0))
+        info = zipfile.ZipInfo(addon_name, (2026, 9, 26, 0, 0, 0))
         info.compress_type = zipfile.ZIP_DEFLATED
         info.external_attr = 0o100644 << 16
         output.writestr(info, addon.read_bytes())

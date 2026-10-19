@@ -2,7 +2,7 @@ package com.turboio.addon;
 import java.util.*;
 final class NavReflect {
  enum Biz{MARS_FOTA,LAUNCHER,HEARTBEAT}enum Priority{NORMAL}static Object manager=new Object(),error=new Object();static boolean ack=true;
- static final List<Message> sent=new ArrayList<>();
+ static final List<Message> sent=new ArrayList<>();static boolean gates=true;static boolean otaGatesInstalled(){return gates;}
  static class Message {String peer;byte[] data;Biz business;Callback cb;Message(byte[] d,String p,Biz b){data=d;peer=p;business=b;}}
  interface Callback{void accept(String n,Object[] args)throws Exception;}
  static Class<?> type(String name){if(name.equals("P3.h"))return Biz.class;if(name.equals("E3.b"))return Priority.class;return NavReflect.class;}

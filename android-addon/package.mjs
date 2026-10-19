@@ -12,11 +12,13 @@ const source=process.argv[2];
 if(!source) throw new Error('Usage: node android-addon/package.mjs /path/to/supported-RayNeo.apk');
 const sha=crypto.createHash('sha256').update(fs.readFileSync(source)).digest('hex');
 const profile=profileFor(sha),host=path.join(root,'build',profile.directory);
-if(profile.version!=='1.0.5')throw new Error('INTEGRATION-07 OTA adapter only supports pinned 1.0.5 (201); use the prior builder for 1.0.4');
+if(profile.version!=='1.0.5'&&profile.version!=='1.0.6')throw new Error('Unsigned builder supports pinned 1.0.5 (201) and 1.0.6 (216); use the prior builder for 1.0.4');
 if(!fs.existsSync(host)) execFileSync('apktool',['d','--no-res','--output',host,source],{stdio:'inherit'});
 // No writes until every required callback/transport descriptor has been checked.
 const abi=verifyHost(host,profile);
-if(abi.ota){fs.writeFileSync(abi.ota.queue,queueHook(fs.readFileSync(abi.ota.queue,'utf8')));fs.writeFileSync(abi.ota.sender,fileHook(fs.readFileSync(abi.ota.sender,'utf8')));}
+// A-segment 1.0.6: profile.ota=false, so the 1.0.5-pinned queue/file gates are never installed.
+const ota=abi.ota&&profile.ota!==false?abi.ota:null;
+if(ota){fs.writeFileSync(ota.queue,queueHook(fs.readFileSync(ota.queue,'utf8')));fs.writeFileSync(ota.sender,fileHook(fs.readFileSync(ota.sender,'utf8')));}
 
 function wrap(file,name,signature,args,returnMode) {
   let text=fs.readFileSync(file,'utf8');
@@ -62,7 +64,7 @@ if(eventText.includes('turboioOriginal_z(')) {
   eventText=eventText.replace(eventHeader,'.method public final turboioOriginal_z(Ljava/lang/String;Ljava/util/Map;)V');
 }
 eventText+='\n'+eventHeader+`\n    .locals 1
-${abi.ota?EVENT_GUARD:''}
+${ota?EVENT_GUARD:''}
     invoke-virtual {p0, p1, p2}, Lcom/rayneo/rayneo_venus_sdk_plugin/j;->turboioOriginal_z(Ljava/lang/String;Ljava/util/Map;)V
     :turboio_nav_try
     invoke-static {p1, p2}, Lcom/turboio/addon/NativeTransfer;->event(Ljava/lang/String;Ljava/util/Map;)V
@@ -81,7 +83,10 @@ const dex=path.join(root,'build/dex/classes.dex');
 execFileSync('python3',[path.join(root,'assemble_apk.py'),source,assembled,dex,output,'--public-assets'],{stdio:'inherit'});
 execFileSync('python3',[path.join(root,'verify_apk.py'),source,output,'--public-assets'],{stdio:'inherit'});
 const report={sourceSha256:sha,sourceVersion:profile.version+' ('+profile.code+')',originalSignaturePreserved:false,
-  changes:['ASR observer','NLP/complete guards','onPostResume native entry','bounded event observer; exclusive business9 before-vendor interception','version-pinned OTA queue and file gates','classes4.dex addon','allowlisted public editorial assets and 20 SDK gallery ZIPs','TTS visibility; non-exported task and dedicated OTA foreground services'],
+  changes:['ASR observer','NLP/complete guards','onPostResume native entry',
+    ota?'bounded event observer; exclusive business9 before-vendor interception':'bounded event observer (no business9 before-vendor guard)',
+    ota?'version-pinned OTA queue and file gates':'no OTA adapter installed (A-segment: official OTA offsets remain 1.0.5-only)',
+    'addon DEX in the next free classesN.dex slot','allowlisted public editorial assets and 20 SDK gallery ZIPs','TTS visibility; non-exported task and dedicated OTA foreground services'],
   credentialsBundled:false,outputSha256:crypto.createHash('sha256').update(fs.readFileSync(output)).digest('hex'),
   installed:false,nonRootValidated:false};
 fs.writeFileSync(path.join(root,'build/package-report-'+profile.version+'.json'),JSON.stringify(report,null,2)+'\n');

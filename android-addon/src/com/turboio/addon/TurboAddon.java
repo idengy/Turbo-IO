@@ -53,7 +53,16 @@ public final class TurboAddon {
 
     public static void install(Activity host) {
         if (Looper.myLooper() != Looper.getMainLooper()) { MAIN.post(() -> install(host)); return; }
-        app = host.getApplicationContext(); activity = new WeakReference<>(host);
+        Context context = host.getApplicationContext();
+        try { NavReflect.select(context.getPackageManager().getPackageInfo(context.getPackageName(), 0).versionCode); }
+        catch (Exception e) {
+            // Fail closed: never run feature code against an unmapped host ABI. `app` stays null so the
+            // ASR/NLP observers keep handing everything to the official handlers.
+            diagnostic = "宿主版本不受支持，扩展功能已禁用";
+            android.util.Log.w("TurboIOAddon", diagnostic + "：" + e.getMessage());
+            return;
+        }
+        app = context; activity = new WeakReference<>(host);
         prefs = app.getSharedPreferences("turboio_settings", 0);
         VoiceSpeech.init(app);
         OtaController.init(app);

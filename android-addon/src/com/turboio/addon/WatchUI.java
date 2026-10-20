@@ -22,6 +22,7 @@ final class WatchUI {
   // 诊断
   LinearLayout diag=EditorialUI.card(a,b);diag.addView(EditorialUI.text(a,"诊断 · 面板探针（固件或 App 升级后复测）",15,EditorialUI.INK));
   EditorialUI.toggle(a,diag,"字号 1（默认 2，下一次开始生效）",NavGlasses.captionFont==1,(v,on)->NavGlasses.captionFont=on?1:2);
+  EditorialUI.toggle(a,diag,"停止前先发一帧空白清屏（若停止后行情仍留在镜片上再开）",NavGlasses.clearBeforeClose,(v,on)->NavGlasses.clearBeforeClose=on);
   EditorialUI.button(a,diag,"盯盘测试 · 合成 5 行行情 3 分钟",false,()->run(a,WatchController.startTest()));
   EditorialUI.button(a,diag,"宽度探针 · 5 行递增长度",false,()->run(a,WatchController.startProbe("width")));
   EditorialUI.button(a,diag,"替换/追加探针 · A 帧 4 秒后 B 帧",false,()->run(a,WatchController.startProbe("append")));

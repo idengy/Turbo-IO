@@ -173,11 +173,17 @@ public final class TurboAddon {
             WatchVoice.Command watchCmd = WatchVoice.match(question);
             if (watchCmd != WatchVoice.Command.NONE && get(response, "Command") == null && !Boolean.TRUE.equals(get(response, "Offline"))) {
                 if (owns) return true;
+                String origin = safeTag(get(response,"Domain"))+"/"+safeTag(get(response,"Intent"))+"/"+safeTag(get(response,"Sub"))+" next="+get(response,"HasNextRound");
                 template = copy(response, "", false); owns = true; done = false; emitted = "";
+                // 2026-10-20 实机:说「开始盯盘」后眼镜语音框一直等输入。官方 NLP 对这句的归类不是普通问答,宿主把 hasNextRound=true
+                // (多轮)原样传给 Flutter 侧,对话框就等下一轮。本地指令是一句终结回答:模板钉成普通问答 chat/chat/workflow、不再多轮。
+                Class<?> t = template.getClass();
+                t.getMethod("setDomain", String.class).invoke(template, "chat"); t.getMethod("setIntent", String.class).invoke(template, "chat");
+                t.getMethod("setSub", String.class).invoke(template, "workflow"); t.getMethod("setHasNextRound", boolean.class).invoke(template, false);
                 long watchToken = generation; replacements++;
                 String watchAnswer = watchCmd == WatchVoice.Command.START ? WatchController.voiceStart() : watchCmd == WatchVoice.Command.STOP ? WatchController.voiceStop()
                     : watchCmd == WatchVoice.Command.START_WORDS ? WatchController.voiceStartWords() : WatchController.voiceStopWords();
-                diagnostic = "本地指令：" + watchCmd + " → " + watchAnswer;
+                diagnostic = "本地指令：" + watchCmd + " → " + watchAnswer + " · 官方归类 " + origin;
                 MAIN.postDelayed(() -> emit(watchToken, watchAnswer, true, null), 300);
                 return true;
             }

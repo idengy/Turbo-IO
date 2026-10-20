@@ -85,6 +85,8 @@ java -cp build/test NavSessionPolicyTest
 # bill 分支:盯盘纯逻辑(状态机 / SSE 解析 / 语音命令)
 javac -encoding UTF-8 -source 8 -target 8 -d build/test src/com/turboio/addon/WatchSession.java src/com/turboio/addon/WatchStream.java src/com/turboio/addon/WatchVoice.java tests/WatchTest.java
 java -cp build/test WatchTest
+javac -encoding UTF-8 -source 8 -target 8 -d build/test src/com/turboio/addon/MarkdownText.java tests/MarkdownTextTest.java
+java -cp build/test MarkdownTextTest
 javac -encoding UTF-8 -source 8 -target 8 -d build/test src/com/turboio/addon/NavCore.java src/com/turboio/addon/NavSimulation.java tests/NavSimulationTest.java
 java -cp build/test NavSimulationTest
 mkdir -p build/test/nav-golden

@@ -22,7 +22,7 @@
 | --- | --- | --- |
 | 眼镜固件 | Strix OS **1.0.5.5** | 眼镜 → 设置 → 关于本机;插件只读预检里「版本=true」 |
 | 手机 App | 官方 **1.0.6(216)** 宿主 + 自签 guarded 包。**不要升级官方 App**(弹「发现新版本」一律暂不升级) | App 关于页;插件升级页顶部 `ANDROID-106 · OFFICIAL-OTA-GUARD-01 · TMIG1` |
-| 未签名 guarded 包 | `android-addon/build/TurboIO-RayNeo-1.0.6-guarded-unsigned.apk`,SHA-256 `80a485a609fa6143ff96c9eb30a110a63fe28c85a0a5c823e9337f3a4a4d6f65` | `local/downloads/SHA256SUMS.local`;签名后的 SHA 填进第 4 节记录表 |
+| 未签名 guarded 包 | `android-addon/build/TurboIO-RayNeo-1.0.6-guarded-unsigned.apk`,**r2** SHA-256 `e2a4b24b9810bd7f69542383bebdb1ba68c80139ca97527d7665901c42071cbe`(2026-10-19 修 NavReflect 标记检测后重打;r1 `80a485a6…` 及其签名包 `5651caad…` 作废) | `local/downloads/SHA256SUMS.local`;签名后的 SHA 填进第 4 节记录表 |
 | 固件 | `local/downloads/firmware-strix-1.0.5.5-tmig1/StrixOS-1.0.5.5-TurboIO-TMIG1-CANDIDATE-NOT-APPROVED.zip`,8,824,204 B,SHA-256 `f1d3616cfde5d128a9b60baab420559e38d19300838b0b87ceb1010f2ac5c940`,**不要解压、改名、重新压缩** | `shasum -a 256 -c` 已 OK(2026-10-19);插件导入时再本机校验一次 |
 | 原厂回退参照 | 同目录 `Strix-OS-1.0.5.5-original.zip`,SHA `2927917f…`。**同版本回刷无人验证,上游不保证** | 只作留档,不是救砖保证 |
 | 手机 | vivo X Fold 5(V2436A),Android 16 / SDK 36,arm64 | A 段已装机验证 |
@@ -114,10 +114,10 @@
 | 项 | 结果 |
 | --- | --- |
 | 日期 / 时间 | |
-| 签名 guarded 包 SHA-256 / 证书指纹 | |
-| 手机系统版本(设置 → 系统升级) | |
+| 签名 guarded 包 SHA-256 / 证书指纹 | r1 `5651caad…`(2026-10-19 17:37,作废,门禁检测 bug);r2:待 Bill 重签后填 / 指纹 `4f941f05…e8478` |
+| 手机系统版本(设置 → 系统升级) | Android 16 / OriginOS 6 / `PD2436G_A_16.1.17.12.W10`(2026-10-19 adb getprop);装前手机上是 A 段 r2 自签包 `abe3b10f…`(adb sha256sum 核对一致,同证书,可 `install -r` 保数据);电量 93% 充电中 |
 | 眼镜刷前固件版本 | |
-| 第 1 步:覆盖安装是否顺利;插件页首行是否 `ANDROID-106 … TMIG1`;配对/语音是否正常 | |
+| 第 1 步:覆盖安装是否顺利;插件页首行是否 `ANDROID-106 … TMIG1`;配对/语音是否正常 | 第一轮 2026-10-20 08:41:`install -r` 成功、业务 15 收包正常;但升级入口弹「门禁未装」= 插件 `NavReflect` 标记检测 bug(见 TODO C1),重打包第二轮待装 |
 | 第 2 步:更新说明是否出现 TMIG1 GUARDED | |
 | 第 3 步:目录 16/16?三项 true?开始安装时间 | |
 | 传输用时 / 片数 / AP 覆盖 / 眼镜重启用时 | |

@@ -127,3 +127,14 @@
 - 处理:①`OtaGates.java` 把三段策略收成 `queue/file/event` 三个静态方法,smali 每处只剩 1 个新引用(事件桥留在 classes2,用掉 1 个);②队列类 `LX3/U;` 与发送类 `LX3/u;`(含其钩子新方法 `turboioOriginal_o/u`)由 `package.mjs` 搬进新建的 `smali_classes5`,apktool 编成 `classes5.dex`(实测只含这两个类,299 个方法引用),插件 dex 顺延为 `classes6.dex`;原厂 classes3/4 原件不动。内部类 `U$a/b/c`、`u$a` 留在 classes2,跨 dex 按名解析(多 dex 自 API 21 起原生支持)。
 - 结果:`classes2.dex` 65,518(反而更宽)、`classes5.dex` 299、`classes6.dex` 3,338。`verify_apk` 加 `--relocated classes5.dex` 显式声明,未声明仍按「插件槽位冲突」报错。
 - 这是**手机端静态事实**,运行时(宿主能否正常加载搬走的类、钩子是否生效)属 C 段装机验收;A 段 r2 包无此改动。
+
+### C1 实机发现(2026-10-20):guarded 标记检测从未执行
+
+现象:guarded 签名包 `5651caad…` 覆盖装成功(手机 base.apk 哈希一致,业务 15 收包正常),但点「实验固件升级」仍弹 A 段「门禁未装」提示。
+
+根因:B5 把 `guarded` 的计算放在 `NavReflect.ensure()` 里,而 `ensure()` 第一行是 `if(selected!=0)return;`。正常启动路径 `MainActivity.onPostResume → TurboAddon.install → NavReflect.select(216)` 先把 `selected` 置位,之后所有 `ensure()` 直接返回,`guarded` 一直是初始 false。`ensure()` 的懒加载分支只在 smali 钩子早于 `onPostResume` 触发时才走,正常使用碰不到。离线测不出:OTA 流程测试用的是 `tests/otaflow/NavReflect.java` 桩(`gates=true`),不编译真 NavReflect 的逻辑。
+
+修法:新增 `NavReflect.guarded()`,与 `select/ensure` 无关,自己取 `ActivityThread.currentApplication()`,`getAssets().open("turboio/official-ota-guarded.txt")` 读出并比对**完整**钉死文本 `ANDROID-106-OFFICIAL-OTA-GUARD-01-TMIG1\n`(比原先 `list()` 查文件名更严);Application 还没就绪时返回 false 且不缓存,就绪后缓存一次。`ApkAssemblyTest.test_guarded_profile_pins_marker_and_library` 加断言:prep 脚本、`verify_apk --guarded`、NavReflect 三处路径与文本一致,且 NavReflect 不再用 `getAssets().list(`。
+
+顺带澄清:首页底部 `ANDROID 1.0.5 · INTEGRATION-08 / CALLBACK-01` 是上游 `EditorialUI` 写死的文案,任何版本都显示,不是判断装没装对的依据;guarded 标识只出现在升级页首行(`OfficialOtaBridge.status()`)。
+

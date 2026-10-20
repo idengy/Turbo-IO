@@ -8,7 +8,9 @@ final class NavReflect {
     // host's obfuscated names (1.0.6 relocation evidence: custom/docs/HOST_1.0.6.md).
     private static String sender="E3.u",message="E3.Q",business="P3.h",priority="E3.b",core="Q3.q",result="P3.A",send="u",sendFile="v";
     private static int selected; // host versionCode once mapped; 0 = not mapped yet
-    private static boolean guarded; // assets/turboio/official-ota-guarded.txt present (package-official-ota-preparation.py --guarded)
+    // Guarded-package marker (package-official-ota-preparation.py --guarded writes exactly this text; verify_apk --guarded pins it too).
+    private static final String GUARD_MARKER="turboio/official-ota-guarded.txt", GUARD_VALUE="ANDROID-106-OFFICIAL-OTA-GUARD-01-TMIG1\n";
+    private static Boolean guardedMarker; // null = not checked yet (host application not available at that time)
     static synchronized void select(int versionCode)throws Exception{
         if(versionCode==216){sender="X3.u";message="X3.Q";business="i4.h";priority="X3.b";core="j4.q";result="i4.A";send="t";sendFile="u";}
         else if(versionCode==201){sender="E3.u";message="E3.Q";business="P3.h";priority="E3.b";core="Q3.q";result="P3.A";send="u";sendFile="v";}
@@ -24,11 +26,26 @@ final class NavReflect {
         if(!(c instanceof android.content.Context))throw new IllegalStateException("Host application unavailable");
         android.content.Context app=((android.content.Context)c).getApplicationContext();
         select(app.getPackageManager().getPackageInfo(app.getPackageName(),0).versionCode);
-        try{String[] files=app.getAssets().list("turboio");guarded=files!=null&&java.util.Arrays.asList(files).contains("official-ota-guarded.txt");}catch(Exception e){guarded=false;}
+    }
+    /** Marker check is independent of select()/ensure(): TurboAddon.install calls select() first on the normal start path, so a check
+     * living only inside ensure() never ran (found on the phone 2026-10-20, C1). Reads the asset and compares the full pinned text. */
+    private static synchronized boolean guarded(){
+        if(guardedMarker!=null)return guardedMarker;
+        android.content.Context app;
+        try{Object c=Class.forName("android.app.ActivityThread").getMethod("currentApplication").invoke(null);
+            if(!(c instanceof android.content.Context))return false; // not memoized: retry once the host application exists
+            app=((android.content.Context)c).getApplicationContext();}catch(Exception e){return false;}
+        boolean found=false;
+        try{java.io.InputStream in=app.getAssets().open(GUARD_MARKER);
+            try{byte[] b=new byte[64];int n=0,r;while(n<b.length&&(r=in.read(b,n,b.length-n))>0)n+=r;
+                found=new String(b,0,n,java.nio.charset.StandardCharsets.US_ASCII).equals(GUARD_VALUE);}finally{in.close();}
+        }catch(Exception e){found=false;}
+        guardedMarker=found;
+        return found;
     }
     /** True when this package may drive OTA: upstream 1.0.5 (201) builds always carry the smali queue/file gates; on 1.0.6
      * only the guarded package (route-patched libapp.so + marker asset) does. A plain 1.0.6 package stays disabled (A-segment). */
-    static boolean otaGatesInstalled(){try{ensure();}catch(Exception e){return false;}return selected==201||guarded;}
+    static boolean otaGatesInstalled(){try{ensure();}catch(Exception e){return false;}return selected==201||guarded();}
     private static String host(String name)throws Exception{
         ensure();
         if(name.equals("E3.u"))return sender;

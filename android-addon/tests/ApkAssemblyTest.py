@@ -92,6 +92,11 @@ class AssemblyTest(unittest.TestCase):
         for pin in ('96cc9a9f4634a2321e06790d0f062cd36e6420ef69c6166eb5bab41608fb917e', 'ANDROID-106-OFFICIAL-OTA-GUARD-01-TMIG1',
                     'assets/turboio/official-ota-guarded.txt'):
             self.assertIn(pin, prep); self.assertIn(pin, verify)
+        # The phone-side check (NavReflect.guarded) must read the same marker path and compare the same full text.
+        nav = (ROOT / 'src/com/turboio/addon/NavReflect.java').read_text()
+        self.assertIn('"turboio/official-ota-guarded.txt"', nav)
+        self.assertIn('"ANDROID-106-OFFICIAL-OTA-GUARD-01-TMIG1\\n"', nav)
+        self.assertNotIn('getAssets().list(', nav)
         with tempfile.TemporaryDirectory(prefix='turbo-apk-test-') as temporary:
             root = pathlib.Path(temporary)
             source = root / 'source.apk'

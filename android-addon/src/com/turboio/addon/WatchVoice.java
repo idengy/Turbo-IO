@@ -10,6 +10,12 @@ public final class WatchVoice {
     private static final Set<String> START_WORDS = new HashSet<>(Arrays.asList("开始背单词", "背单词", "打开背单词", "开启背单词", "进入背单词", "背单词模式", "单词模式", "开始单词", "打开单词本", "开始背词"));
     private static final Set<String> STOP_WORDS = new HashSet<>(Arrays.asList("停止背单词", "关闭背单词", "结束背单词", "退出背单词", "关掉背单词", "不背了", "停止单词", "关闭单词本", "退出单词模式"));
 
+    /** 同音错字 → 正字(成对:错, 正)。2026-10-20 Hermes 日志实录:「开始定盘。」「开始订牌。」 */
+    private static final String[] HOMOPHONES = {
+        "定盘", "盯盘", "订盘", "盯盘", "顶盘", "盯盘", "钉盘", "盯盘", "丁盘", "盯盘", "叮盘", "盯盘",
+        "订牌", "盯盘", "定牌", "盯盘", "盯牌", "盯盘", "顶牌", "盯盘", "钉牌", "盯盘",
+        "北单词", "背单词", "倍单词", "背单词", "被单词", "背单词", "备单词", "背单词", "贝单词", "背单词",
+    };
     public static Command match(String text) {
         if (text == null) return Command.NONE;
         StringBuilder b = new StringBuilder();
@@ -20,6 +26,8 @@ public final class WatchVoice {
         }
         String t = b.toString();
         if (t.isEmpty() || t.length() > 8) return Command.NONE;
+        // r13(2026-10-20 实机):官方 ASR 把「盯盘」听成「定盘」「订牌」,整句落到模型路径。匹配前把同音错字归一化;表只收 ASR 真会产出的写法。
+        for (int i = 0; i < HOMOPHONES.length; i += 2) t = t.replace(HOMOPHONES[i], HOMOPHONES[i + 1]);
         if (START.contains(t)) return Command.START;
         if (STOP.contains(t)) return Command.STOP;
         if (START_WORDS.contains(t)) return Command.START_WORDS;

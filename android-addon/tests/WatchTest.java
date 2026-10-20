@@ -58,6 +58,11 @@ public final class WatchTest {
         check(WatchVoice.match("停止背单词") == Command.STOP_WORDS && WatchVoice.match("不背了") == Command.STOP_WORDS && WatchVoice.match("退出单词模式") == Command.STOP_WORDS);
         check(WatchVoice.match("帮我背单词 serendipity 什么意思") == Command.NONE && WatchVoice.match("单词") == Command.NONE);
         check(WatchVoice.match("开始盯盘") == Command.START && WatchVoice.match("停止盯盘") == Command.STOP);
+        // r13 同音错字(实录)
+        check(WatchVoice.match("开始定盘。") == Command.START && WatchVoice.match("开始订牌。") == Command.START && WatchVoice.match("开启顶盘") == Command.START);
+        check(WatchVoice.match("停止定盘") == Command.STOP && WatchVoice.match("关掉订牌") == Command.STOP);
+        check(WatchVoice.match("开始北单词") == Command.START_WORDS && WatchVoice.match("停止倍单词") == Command.STOP_WORDS);
+        check(WatchVoice.match("帮我定盘一下螺纹") == Command.NONE && WatchVoice.match("定盘") == Command.NONE);
         System.out.println("PASS " + checks + " watch checks");
     }
 }

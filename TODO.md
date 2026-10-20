@@ -28,8 +28,10 @@
   - [x] C1 第二轮验收 2026-10-20(Bill 确认):升级页首行 `ANDROID-106 · OFFICIAL-OTA-GUARD-01 · TMIG1` ✅;眼镜语音提问正常 ✅(中间 502 是 Mac 网关没在跑,与新包无关,已装 LaunchAgent 根治)。**C1 通过:guarded r2 在手机上跑通,官方蓝牙收发未受搬类影响**
 - [x] C2 2026-10-20 09:10(手机时钟)通过:只下载来源开放后,官方「眼镜软件版本」页显示 Strix OS 1.0.5.5 · 8.4M,说明文字是插件 Feed 生成的「TMIG1 experimental firmware (Strix OS 1.0.5.5 base). AP-only; requires separate one-time authorization…」(官方 UI 只显示 description,不显示任务名 TMIG1 GUARDED,FLASH_GUIDE 第 3 条按此修正),下载解压到「新软件版本已准备就绪」弹窗,Bill 选「稍后再说」未安装;自动更新开关已关
   - [x] 2026-10-20 准备:TMIG1 ZIP 已 `adb push` 到手机 `/sdcard/Download/StrixOS-1.0.5.5-TurboIO-TMIG1-CANDIDATE-NOT-APPROVED.zip`,手机端 sha256sum `f1d3616c…` 与本机一致;手机电量 98% 充电中。眼镜电量 ≥50% 由 Bill 目视确认
-- [ ] C3 只读预检「官方目录 16/16」三项 true(目录名 `Strix_OS_1.0.5.5` 是推断,不通过就停、导状态文件回 B 段)→ 输入 TMIG1 授权 → 两分钟内官方页开始安装一次
-- [ ] C4 自然重启 → TMIG1 新菜单 → 只读回查 → 解除结果保护 → LOCKED/授权 0;填记录表
+- [x] C3 只读预检「官方目录 16/16」三项 true → 输入 TMIG1 授权 → 两分钟内官方页开始安装一次 —— 2026-10-20 通过(目录名 `Strix_OS_1.0.5.5` 的推断被实机证实)
+  - [x] 2026-10-20 09:14 只读预检通过:**官方目录 16/16 校验通过**(B 段推断的解压目录名 `Strix_OS_1.0.5.5` 正确),版本=true 电量=true 空闲=true 空间=false(允许),阶段 LOCKED、授权 0、拦截 0;来源查询 8 / 匹配固件 4 / 下载请求 1 / 拒绝 0;查询形状 firmware/S3/android/name/version 全 true(目录名 `Strix_OS_1.0.5.5` 是推断,不通过就停、导状态文件回 B 段)→ 输入 TMIG1 授权 → 两分钟内官方页开始安装一次
+  - [x] 2026-10-20 09:17 第一次点 3 报「授权条件未满足」(口令大小写/全角问题,重输英文大写 TMIG1 后通过)→ 授权 1 / ARMED → 官方页「安装更新 → 开始安装」一次 → 插件 TRANSFER 片数增长(约 09:2x,Bill 口述)
+- [x] C4 2026-10-20 09:2x–09:31(手机时钟):传输 type7 出 236/入 236、type8 入 101、type9 入 1(安装结果);眼镜自然重启回首页、实体旋钮正常(Bill 确认);插件「连接历史不完整,保持锁定」→ Bill 点「允许只读回查」→「解除结果保护」→ 最终 **人工验收已记录;阶段 LOCKED、授权 0、结果保护 未开始**,拦截 0。**Android 1.0.6(216)+ vivo X Fold 5 + TMIG1 首次实刷完成**。功能复核(官方语音/录音/字幕/Hermes/新菜单)待 Bill 报告
 - [ ] C5 刷后:仪表盘卡片 / 小应用接 `kb quotes --json`(阶段 4 原计划)
 
 ## 步骤

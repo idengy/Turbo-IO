@@ -134,30 +134,37 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         url = urlsplit(self.path)
         path = url.path.rstrip("/")
-        if path.endswith("/v1/watch/names") or path.endswith("/v1/watch/stream"):
+        if path.endswith("/v1/watch/names") or path.endswith("/v1/watch/stream") or path.endswith("/v1/watch/resolve"):
             if not self._authorized():
                 return self._json(401, {"error": {"message": "unauthorized"}})
             if path.endswith("/v1/watch/names"):
                 return self._json(200, {"names": [{"name": n, "short": watch.short(n)} for n in self.quotes.names]})
             # BaseHTTPRequestHandler 把请求行按 latin-1 解码,原样 UTF-8 的中文要转回;%XX 编码的由 parse_qs 处理
-            query = url.query.encode("latin-1", "ignore").decode("utf-8", "replace")
-            raw = parse_qs(query).get("names", [""])[0]
-            names, unknown = self._resolve([x.strip() for x in raw.split(",") if x.strip()])
-            if unknown or not names:
+            query = parse_qs(url.query.encode("latin-1", "ignore").decode("utf-8", "replace"))
+            if path.endswith("/v1/watch/resolve"):
+                q = query.get("q", [""])[0].strip()
+                hit, unknown = self._contracts([q]) if q else ([], [q])
+                if unknown or not hit:
+                    return self._json(404, {"error": {"message": "未识别: " + q}})
+                h = hit[0]
+                return self._json(200, {"label": h["label"], "display": watch.short(h["label"]), "symbol": h["symbol"], "name": h["name"], "yymm": h["yymm"]})
+            raw = query.get("names", [""])[0]
+            hit, unknown = self._contracts([x.strip() for x in raw.split(",") if x.strip()][:10])
+            if unknown or not hit:
                 return self._json(400, {"error": {"message": "未识别: " + "、".join(unknown) if unknown else "缺少 names"}})
-            return self._watch(names[:10])
+            return self._watch([h["label"] for h in hit])
         self._forward(None)
 
-    def _resolve(self, raw: list[str]):
-        names, unknown = [], []
-        for x in raw:
-            n = x if x in self.quotes.names else self.quotes.aliases.get(x, "")
-            if n in self.quotes.names:
-                if n not in names:
-                    names.append(n)
-            else:
-                unknown.append(x)
-        return names, unknown
+    def _contracts(self, tokens: list[str]):
+        """品种 / 品种+月份 → 标准 label(铁矿石2701);交给 futures-kb 的 resolve_contracts,规则只写一处。"""
+        if not tokens:
+            return [], []
+        out = subprocess.run([str(KB_PY), "-c", "import json,sys;from kb.quotes import resolve_contracts;h,u=resolve_contracts(json.loads(sys.argv[1]));print(json.dumps({'hit':h,'unknown':u},ensure_ascii=False))",
+                              json.dumps(tokens, ensure_ascii=False)], cwd=KB_ROOT, capture_output=True, text=True, timeout=30)
+        if out.returncode != 0:
+            raise RuntimeError("resolve failed")
+        r = json.loads(out.stdout)
+        return r["hit"], r["unknown"]
 
     def _json(self, status: int, obj: dict):
         payload = json.dumps(obj, ensure_ascii=False).encode()

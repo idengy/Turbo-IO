@@ -29,6 +29,14 @@ class FormatTest(unittest.TestCase):
         self.assertEqual(dup, set(), f"短名碰撞: {dup}")
         self.assertTrue(all(len(s) <= 3 for s in shorts), [s for s in shorts if len(s) > 3])
 
+    def test_contract_labels(self):
+        self.assertEqual(watch.split_label("铁矿石2701"), ("铁矿石", "2701"))
+        self.assertEqual(watch.split_label("铁矿石"), ("铁矿石", ""))
+        self.assertEqual(watch.short("铁矿石2701"), "铁矿2701")
+        self.assertEqual(watch.short("铜2611"), "铜2611")
+        self.assertEqual(watch.line("铁矿石2701", {"last": 678.0, "chg_pct": -0.66}), "铁矿2701 678 -0.66%")
+        self.assertLessEqual(len("铁矿2701 678.0 -0.66%") + 2, watch.WIDTH)  # 2 个汉字各占 2 列
+
     def test_line_formats(self):
         row = {"last": 3215.0, "chg_pct": 0.62}
         self.assertEqual(watch.line("螺纹钢", row, compact=0), "螺纹 3215 +0.62%")
@@ -36,7 +44,7 @@ class FormatTest(unittest.TestCase):
         self.assertEqual(watch.line("螺纹钢", row, compact=2), "螺纹3215 +0.62")
         self.assertEqual(watch.line("铁矿石", {"last": 781.5, "chg_pct": -0.19}, 1), "铁矿 781.5 -0.19")
         self.assertEqual(watch.line("铜", {"last": 109110.0, "chg_pct": -0.67}), "铜 109110 -0.67%")  # 默认 compact=0,18 格 ≤ WIDTH
-        self.assertLessEqual(watch.WIDTH, 19); self.assertEqual(watch.COMPACT, 0)
+        self.assertEqual(watch.WIDTH, 37); self.assertEqual(watch.COMPACT, 0)
         self.assertEqual(watch.line("豆粕", {"last": 2890.0, "chg_pct": None}, 1), "豆粕 2890 --")
         self.assertEqual(watch.line("黄金", None, 1), "黄金 -- --")
         self.assertEqual(watch.line("黄金", {"last": None}, 1), "黄金 -- --")

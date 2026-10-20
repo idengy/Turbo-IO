@@ -21,7 +21,7 @@ public final class WatchController {
     private static Context app;private static SharedPreferences prefs;
     // 完整模式
     private static long epoch;private static boolean running,renewing;private static long sessionStart,closeAt,lastData;private static int attempt;
-    private static String note="未开始",lastText="",streamUrl="";private static volatile HttpURLConnection connection;
+    private static String note="未开始",lastText="",streamUrl="";private static volatile HttpURLConnection connection;private static boolean leased;
     // P0 探针
     private static final String[] NAMES={"螺纹","铁矿","焦煤","豆粕","沪铜"};
     private static final double[] BASE={3215,781.5,1120,2890,78540},STEP={1,0.5,2,1,10};
@@ -50,6 +50,20 @@ public final class WatchController {
             finally{if(http!=null)http.disconnect();}
             final String f=failure;MAIN.post(()->done.run(f));},"TurboIO-watch-names");t.setDaemon(true);t.start();
     }
+    interface Resolved{void run(String label,String display,String failure);}
+    /** 后台 GET /v1/watch/resolve?q=铁矿 2701 → (label=铁矿石2701, display=铁矿2701);回调在主线程。 */
+    static void resolve(String q,Resolved done){
+        final String url,key;try{url=origin()+"/v1/watch/resolve?q="+URLEncoder.encode(q.trim(),"UTF-8");key=SecretStore.get(app);}catch(Exception e){done.run(null,null,"请先在「模型与对话」配置自有模型地址与 Key");return;}
+        Thread t=new Thread(()->{String label=null,display=null,failure=null;HttpURLConnection http=null;
+            try{http=(HttpURLConnection)new URL(url).openConnection();http.setConnectTimeout(15000);http.setReadTimeout(30000);http.setInstanceFollowRedirects(false);http.setRequestProperty("Authorization","Bearer "+key);
+                int code=http.getResponseCode();
+                if(code==404)failure="没找到「"+q.trim()+"」，试试「铁矿 2701」或「螺纹钢」";
+                else if(code!=200)throw new IOException("HTTP "+code);
+                else{JSONObject o=new JSONObject(read(http.getInputStream(),64*1024));label=o.getString("label").replace(",","");display=o.optString("display",label);}
+            }catch(Exception e){failure="查询失败："+e.getClass().getSimpleName();}
+            finally{if(http!=null)http.disconnect();}
+            final String l=label,d=display,f=failure;MAIN.post(()->done.run(l,d,f));},"TurboIO-watch-resolve");t.setDaemon(true);t.start();
+    }
     private static String read(InputStream in,int cap)throws IOException{ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] buf=new byte[8192];int n;while((n=in.read(buf))>0){out.write(buf,0,n);if(out.size()>cap)throw new IOException("too large");}return new String(out.toByteArray(),StandardCharsets.UTF_8);}
     /** 模型端点的 origin(https://host[:port]);端点不合法时抛异常。 */
     static String origin()throws Exception{String endpoint=app.getSharedPreferences("turboio_settings",0).getString("endpoint","");if(!ChatPolicy.endpoint(endpoint))throw new IllegalStateException("endpoint");URL u=new URL(endpoint);return u.getProtocol()+"://"+u.getHost()+(u.getPort()>0?":"+u.getPort():"");}
@@ -59,7 +73,7 @@ public final class WatchController {
     static String status(){
         StringBuilder b=new StringBuilder(note);
         if(running){long age=lastData>0?(SystemClock.elapsedRealtime()-lastData)/1000:-1;b.append(" · 品种 ").append(names()).append(age<0?" · 等待首帧":" · 最近数据 "+age+" s 前").append(WatchSession.stale(SystemClock.elapsedRealtime(),lastData)?" · 可能停滞":"").append(renewing?" · 续期中":"");
-            b.append(" · 会话 ").append((SystemClock.elapsedRealtime()-sessionStart)/60000).append(" 分钟");}
+            b.append(" · 会话 ").append((SystemClock.elapsedRealtime()-sessionStart)/60000).append(" 分钟").append(leased?" · 后台租约已持有":BackgroundWork.enabled()?" · 后台租约未获得（退后台会停）":" · 未开「后台运行」，退后台会停");}
         if(!mode.isEmpty())b.append(" · ").append(mode).append(" · 已推 ").append(offers).append(" 帧 · ").append(seconds).append(" s");
         return b.toString();
     }
@@ -81,7 +95,7 @@ public final class WatchController {
         String why=precheck();if(why!=null)return why;
         final String key;try{StringBuilder q=new StringBuilder();for(String n:names()){if(q.length()>0)q.append(',');q.append(n);}streamUrl=origin()+"/v1/watch/stream?names="+URLEncoder.encode(q.toString(),"UTF-8");key=SecretStore.get(app);}catch(Exception e){return "拼接流地址失败";}
         if(!NavGlasses.startCaption("盯盘连接中…"))return "无法开启眼镜显示："+NavGlasses.status();
-        BackgroundWork.acquire("盯盘",16);
+        leased=BackgroundWork.acquire("盯盘",16);
         epoch++;running=true;renewing=false;attempt=0;lastData=0;lastText="";sessionStart=SystemClock.elapsedRealtime();note="已开始，等待行情流";
         final long e=epoch;spawn(e,key);MAIN.removeCallbacks(tick);MAIN.postDelayed(tick,1000);
         return null;
@@ -90,7 +104,7 @@ public final class WatchController {
         boolean was=running;running=false;renewing=false;epoch++;MAIN.removeCallbacks(tick);
         final HttpURLConnection c=connection;connection=null;if(c!=null){Thread t=new Thread(c::disconnect,"TurboIO-watch-close");t.setDaemon(true);t.start();}
         if(!mode.isEmpty())mode="";
-        if(NavGlasses.active())NavGlasses.stop();
+        if(NavGlasses.active())NavGlasses.closeAuto();
         if(was)BackgroundWork.release("盯盘");
         note=reason;
     }

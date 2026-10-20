@@ -24,17 +24,27 @@ SHORT = {
     "棉纱": "棉纱", "硅铁": "硅铁", "锰硅": "锰硅", "尿素": "尿素",
     "塑料": "塑料", "聚氯乙烯": "PVC", "纸浆": "纸浆", "原木": "原木", "粳米": "粳米",
 }
-WIDTH = 19      # 字号 2 每行可用的汉字宽度格数:2026-10-20 实测「5」+18 个汉字整行显示,≥19 格
+WIDTH = 37      # 字号 2 每行可用的半角列数:2026-10-20 实测「5」+18 个汉字(37 列)整行显示;「铁矿2701 678.0 -0.66%」21 列
 COMPACT = 0     # 0: 「螺纹 3215 +0.62%」 1: 去掉 %  2: 再去掉短名后的空格。实测宽度够,保留 %
 CLOCK_MAX_NAMES = 4
 FRAME_INTERVAL = 1.0
 HEARTBEAT = 10.0
 
 
-def short(name: str) -> str:
+def split_label(label: str):
+    """「铁矿石2701」→ ("铁矿石","2701");「铁矿石」→ ("铁矿石","")。"""
+    i = len(label)
+    while i > 0 and label[i - 1].isdigit():
+        i -= 1
+    return label[:i], label[i:]
+
+
+def short(label: str) -> str:
+    """显示名:品种短名 + 月份(铁矿2701);主连只有短名。"""
+    name, yymm = split_label(label)
     if name in SHORT:
-        return SHORT[name]
-    return name if len(name) <= 2 else name[:2]
+        return SHORT[name] + yymm
+    return (name if len(name) <= 2 else name[:2]) + yymm
 
 
 def price(v) -> str:

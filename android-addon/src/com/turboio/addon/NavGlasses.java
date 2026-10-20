@@ -53,6 +53,8 @@ public final class NavGlasses {
     public static void confirmIdle(){if(phase.equals("starting")||phase.equals("ready"))return;autoIdle=false;MAIN.removeCallbacks(tick);sid="";device="";latest="";pending=false;mark("idle","已由用户确认镜片退出");}
     /** 盯盘 55 分钟续期:只在 ready 时有效;关闭帧被 SDK 确认送达后自动回 idle,由 WatchController 再开新 sid。 */
     public static void renew(){if(!phase.equals("ready"))return;autoIdle=true;stop();}
+    /** 盯盘停止:同样走「关闭帧送达即回 idle」,用户不必再点「确认眼镜已回首页」;SDK 拒绝时仍落 uncertain 等人工确认。 */
+    public static void closeAuto(){if(!phase.equals("ready")&&!phase.equals("starting"))return;autoIdle=true;stop();}
     private static void send(int type,JSONObject json)throws Exception{
         if(!device.equals(connected()))throw new IllegalStateException("device_changed");
         Object business=NavReflect.call(NavReflect.type("P3.h"),"valueOf","AI_SUBTITLE"),priority=NavReflect.call(NavReflect.type("E3.b"),"valueOf","NORMAL");

@@ -69,7 +69,26 @@ class LayoutTest(unittest.TestCase):
         for fr in words.ruler_frames():
             self.assertLessEqual(len(fr.split("\n")), words.MAX_LINES)
             self.assertLessEqual(len(fr), words.MAX_CHARS)
-        self.assertIn("1234567890", words.ruler_frames()[0])
+        self.assertIn("1234567890", words.ruler_frames()[1])
+
+    def test_ipa_probe_frame_numbers_every_symbol(self):
+        fr = words.ipa_probe_frame()
+        self.assertLessEqual(len(fr.split("\n")), words.MAX_LINES)
+        for i, ch in enumerate(words.IPA_SYMBOLS):
+            self.assertIn(f"{i + 1}{ch}", fr)
+        self.assertEqual(words.ruler_frames()[0], fr)
+        self.assertEqual(set(words.IPA_FALLBACK), set(words.IPA_SYMBOLS))
+
+    def test_safe_ipa_replaces_only_missing(self):
+        old = set(words.IPA_MISSING)
+        try:
+            words.IPA_MISSING.clear()
+            self.assertEqual(words.safe_ipa("ˈæpl"), "ˈæpl")
+            words.IPA_MISSING.update({"æ", "ɪ"})
+            self.assertEqual(words.safe_ipa("ˈæpl ɪ"), "ˈaepl I")
+            self.assertEqual(words.layout({"word": "apple", "phonetic": "ˈæpl", "trans": ["n. 苹果"]}), ["apple  /ˈaepl/\nn. 苹果"])
+        finally:
+            words.IPA_MISSING.clear(); words.IPA_MISSING.update(old)
 
     def test_clamp_seconds(self):
         self.assertEqual(words.clamp_seconds("x"), words.DEFAULT_SECONDS)

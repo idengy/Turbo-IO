@@ -18,6 +18,21 @@ MAX_CHARS = 384       # NavCore.clip 上限
 MIN_SECONDS, MAX_SECONDS, DEFAULT_SECONDS = 3, 60, 6
 HEARTBEAT = 10.0
 
+# ---------- 音标字形 ----------
+# 眼镜字体缺哪些 IPA 字形由探针(ipa_probe_frame)定:Bill 报编号 → 把对应符号填进 IPA_MISSING,layout 用 IPA_FALLBACK 替换,其余原样。
+# 词库 182 词实际用到的符号(2026-10-20 统计)按频次排:ˈ ɪ ə ː ɑ æ ʊ ʃ ʒ ˌ ɡ ɜ ɔ ŋ ʌ θ ɒ;ð 暂未出现但常见,一并探。
+IPA_SYMBOLS = "ˈˌːɪəɑæʊʃʒɡɜɔŋʌθɒð"
+IPA_FALLBACK = {"ˈ": "'", "ˌ": ",", "ː": ":", "ɪ": "I", "ə": "@", "ɑ": "a", "æ": "ae", "ʊ": "U", "ʃ": "S", "ʒ": "Z",
+                "ɡ": "g", "ɜ": "3", "ɔ": "O", "ŋ": "N", "ʌ": "V", "θ": "th", "ɒ": "Q", "ð": "dh"}   # X-SAMPA 近似,先用后改
+IPA_MISSING: set = set()   # 探针后填,例如 {"ɪ", "ʊ"}
+
+
+def safe_ipa(phon: str) -> str:
+    """把眼镜字体缺字形的音标符号换成 IPA_FALLBACK 里的近似写法;IPA_MISSING 为空则原样返回。"""
+    if not IPA_MISSING:
+        return phon
+    return "".join(IPA_FALLBACK.get(ch, ch) if ch in IPA_MISSING else ch for ch in phon)
+
 
 # ---------- 宽度 ----------
 def cell(ch: str) -> float:
@@ -82,7 +97,7 @@ def layout(entry: dict, width: float = WIDTH, max_lines: int = MAX_LINES) -> lis
     """一个单词 → 若干帧(每帧 ≤max_lines 行)。首帧第 1 行「单词 /音标/」(放不下则音标独占第 2 行),其余行放释义;
     释义放不完的拆到后续帧,后续帧第 1 行仍是单词方便对照。"""
     word = (entry.get("word") or "").strip()
-    phon = (entry.get("phonetic") or "").strip().strip("/").strip()
+    phon = safe_ipa((entry.get("phonetic") or "").strip().strip("/").strip())
     phon = f"/{phon}/" if phon else ""
     head = [word]
     if phon:
@@ -108,14 +123,21 @@ def layout(entry: dict, width: float = WIDTH, max_lines: int = MAX_LINES) -> lis
     return [f[:MAX_CHARS] for f in frames]
 
 
+def ipa_probe_frame() -> str:
+    """音标字形探针:每个符号前带编号,Bill 报「几号是方块/空白」。第 1 行编号 1–9,第 2 行 10–18,后面是整词对照。"""
+    items = [f"{i + 1}{ch}" for i, ch in enumerate(IPA_SYMBOLS)]
+    return "\n".join([" ".join(items[:9]), " ".join(items[9:]), "报哪几号是方块或空白", "/ˌserənˈdɪpəti/ /ˈθɪŋkɪŋ/", "/ɡʊd/ /ɔːl/ /ʒɒ/ /ðæt/ /ɜːθ/"])
+
+
 def ruler_frames() -> list[str]:
-    """宽度探针:Bill 在眼镜上数每行能看到第几个字符,据此定 ASCII_PER_CELL 与 IPA 字形是否可用。"""
+    """宽度探针:Bill 在眼镜上数每行能看到第几个字符,据此定 ASCII_PER_CELL 与 IPA 字形是否可用。第 1 帧是音标字形探针。"""
     digits = "".join(str(i % 10) for i in range(1, 51))           # 50 个数字,每 10 个一循环
     lower = "abcdefghijklmnopqrstuvwxyz" * 2                       # 52 个小写
     cjk = "一二三四五六七八九十甲乙丙丁戊己庚辛壬癸子丑寅卯"        # 24 个汉字(P0 为 19 格)
     ipa = "/ˈsɛrənˌdɪpɪti/ /ʃɒθðŋʒæɜːɔːuːɑːəʊaɪ/"
     mixed = "serendipity  /ˌserənˈdɪpəti/"
     return [
+        ipa_probe_frame(),
         "\n".join([digits, lower, cjk, ipa, mixed]),
         "\n".join(["ABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWX", "n. 意外发现珍奇事物的本领；机缘巧合 serendipity", "1234567890" * 3, cjk, "探针帧 2 · 数到第几格看不见"]),
     ]

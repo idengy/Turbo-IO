@@ -21,14 +21,21 @@ public final class WatchController {
     private static Context app;private static SharedPreferences prefs;
     // 完整模式
     private static long epoch;private static boolean running,renewing;private static long sessionStart,closeAt,lastData;private static int attempt;
-    private static String note="未开始",lastText="",streamUrl="";private static volatile HttpURLConnection connection;private static boolean leased;
+    private static String note="未开始",lastText="",streamUrl="";
+    /** 当前任务:「盯盘」或「背单词」(bill 分支 2026-10-20):两者共用同一个 SSE→面板壳,只差流地址与文案。 */
+    static String task="盯盘";private static volatile HttpURLConnection connection;private static boolean leased;
     // P0 探针
     private static final String[] NAMES={"螺纹","铁矿","焦煤","豆粕","沪铜"};
     private static final double[] BASE={3215,781.5,1120,2890,78540},STEP={1,0.5,2,1,10};
     private static String mode="";private static int offers,seconds;
     private static final double[] price=new double[5];private static final Random random=new Random();
 
-    static void init(Context c){app=c.getApplicationContext();prefs=app.getSharedPreferences("turboio_watch",0);BackgroundWork.register("盯盘",()->stop("从后台通知停止"));}
+    static void init(Context c){app=c.getApplicationContext();prefs=app.getSharedPreferences("turboio_watch",0);BackgroundWork.register("盯盘",()->stop("从后台通知停止"));BackgroundWork.register("背单词",()->stop("从后台通知停止"));}
+    // ---- 背单词设置(每帧秒数、随机顺序;排版与词库都在网关) ----
+    static int wordsSeconds(){return prefs.getInt("words_seconds",6);}
+    static void wordsSeconds(int s){prefs.edit().putInt("words_seconds",s).apply();}
+    static boolean wordsShuffle(){return prefs.getBoolean("words_shuffle",false);}
+    static void wordsShuffle(boolean on){prefs.edit().putBoolean("words_shuffle",on).apply();}
 
     // ---- 品种 ----
     static List<String> names(){List<String> out=new ArrayList<>();for(String n:prefs.getString("names","").split(","))if(!n.trim().isEmpty())out.add(n.trim());return out;}
@@ -72,7 +79,7 @@ public final class WatchController {
     static boolean running(){return running;}
     static String status(){
         StringBuilder b=new StringBuilder(note);
-        if(running){long age=lastData>0?(SystemClock.elapsedRealtime()-lastData)/1000:-1;b.append(" · 品种 ").append(names()).append(age<0?" · 等待首帧":" · 最近数据 "+age+" s 前").append(WatchSession.stale(SystemClock.elapsedRealtime(),lastData)?" · 可能停滞":"").append(renewing?" · 续期中":"");
+        if(running){long age=lastData>0?(SystemClock.elapsedRealtime()-lastData)/1000:-1;b.append(task.equals("盯盘")?" · 品种 "+names():" · "+task).append(age<0?" · 等待首帧":" · 最近数据 "+age+" s 前").append(WatchSession.stale(SystemClock.elapsedRealtime(),lastData)?" · 可能停滞":"").append(renewing?" · 续期中":"");
             b.append(" · 会话 ").append((SystemClock.elapsedRealtime()-sessionStart)/60000).append(" 分钟").append(leased?" · 后台租约已持有":BackgroundWork.enabled()?" · 后台租约未获得（退后台会停）":" · 未开「后台运行」，退后台会停");}
         if(!mode.isEmpty())b.append(" · ").append(mode).append(" · 已推 ").append(offers).append(" 帧 · ").append(seconds).append(" s");
         return b.toString();
@@ -81,10 +88,11 @@ public final class WatchController {
 
     // ---- 完整模式 ----
     /** 能否开始;null = 可以,否则是给用户看的原因。 */
-    static String precheck(){
-        if(running)return "盯盘已在进行";
+    static String precheck(){return precheck(false);}
+    private static String precheck(boolean words){
+        if(running)return task+"已在进行";
         if(!mode.isEmpty())return "探针进行中，请先停止";
-        if(names().isEmpty())return "请先在手机勾选品种（最多 5 个）";
+        if(!words&&names().isEmpty())return "请先在手机勾选品种（最多 5 个）";
         if(NavGlasses.active())return "上一显示会话未结束（"+NavGlasses.phase()+"），请先确认眼镜已回首页";
         try{origin();}catch(Exception e){return "请先在「模型与对话」配置自有模型地址（https，以 /chat/completions 结尾）";}
         try{if(SecretStore.get(app).isEmpty())return "模型 Key 为空，请先在「模型与对话」配置";}catch(Exception e){return "读取模型 Key 失败";}
@@ -93,11 +101,26 @@ public final class WatchController {
     /** 开始盯盘;返回 null = 已开始,否则原因。 */
     static String start(){
         if(running)return restart();
-        String why=precheck();if(why!=null)return why;
+        String why=precheck(false);if(why!=null)return why;
         final String key;try{StringBuilder q=new StringBuilder();for(String n:names()){if(q.length()>0)q.append(',');q.append(n);}streamUrl=origin()+"/v1/watch/stream?names="+URLEncoder.encode(q.toString(),"UTF-8");key=SecretStore.get(app);}catch(Exception e){return "拼接流地址失败";}
-        if(!NavGlasses.startCaption("盯盘连接中…"))return "无法开启眼镜显示："+NavGlasses.status();
-        leased=BackgroundWork.acquire("盯盘",16);
-        epoch++;running=true;renewing=false;attempt=0;lastData=0;lastText="";sessionStart=SystemClock.elapsedRealtime();note="已开始，等待行情流";
+        return begin("盯盘",key,"盯盘连接中…","已开始，等待行情流");
+    }
+    /** 开始背单词:网关 /v1/words/stream 每 seconds 秒一帧(单词 / 音标 / 释义已排好版);返回 null = 已开始。 */
+    static String startWords(int seconds,boolean shuffle){
+        String why=precheck(true);if(why!=null)return why;
+        final String key;try{streamUrl=origin()+"/v1/words/stream?seconds="+Math.max(3,Math.min(60,seconds))+"&order="+(shuffle?"shuffle":"seq");key=SecretStore.get(app);}catch(Exception e){return "拼接流地址失败";}
+        return begin("背单词",key,"单词本连接中…","已开始，等待单词");
+    }
+    /** 宽度探针:网关循环发标尺帧(数字 / 字母 / 汉字 / 音标各一行),Bill 数到第几格看不见,回头只改网关 words.py 的常量。 */
+    static String startWordsProbe(){
+        String why=precheck(true);if(why!=null)return why;
+        final String key;try{streamUrl=origin()+"/v1/words/stream?seconds=8&probe=1";key=SecretStore.get(app);}catch(Exception e){return "拼接流地址失败";}
+        return begin("背单词",key,"标尺探针连接中…","探针已开始，数眼镜上每行能看到第几个字符");
+    }
+    private static String begin(String t,String key,String first,String n){
+        if(!NavGlasses.startCaption(first))return "无法开启眼镜显示："+NavGlasses.status();
+        task=t;leased=BackgroundWork.acquire(task,16);
+        epoch++;running=true;renewing=false;attempt=0;lastData=0;lastText="";sessionStart=SystemClock.elapsedRealtime();note=n;
         final long e=epoch;spawn(e,key);MAIN.removeCallbacks(tick);MAIN.postDelayed(tick,1000);
         return null;
     }
@@ -120,7 +143,7 @@ public final class WatchController {
         final HttpURLConnection c=connection;connection=null;if(c!=null){Thread t=new Thread(c::disconnect,"TurboIO-watch-close");t.setDaemon(true);t.start();}
         if(!mode.isEmpty())mode="";
         if(NavGlasses.active())NavGlasses.closeAuto();
-        if(was)BackgroundWork.release("盯盘");
+        if(was)BackgroundWork.release(task);
         note=reason;
     }
     /** 语音「开始盯盘」:先校验,再延迟 1.5 s 真正开始(让官方回答区先关闭);返回给眼镜说的话。 */
@@ -130,7 +153,15 @@ public final class WatchController {
         MAIN.postDelayed(()->{String r=start();if(r!=null)note="语音开始失败："+r;},1500);
         return "盯盘已开始，手机可切换品种";
     }
-    static String voiceStop(){if(!running)return "当前没有在盯盘";MAIN.postDelayed(()->stop("语音停止"),300);return "盯盘已停止";}
+    static String voiceStop(){return voiceStop("盯盘");}
+    static String voiceStopWords(){return voiceStop("背单词");}
+    private static String voiceStop(String t){if(!running)return "当前没有在"+t;MAIN.postDelayed(()->stop("语音停止"),300);return task+"已停止";}
+    /** 语音「开始背单词」:用手机上设好的秒数与顺序。 */
+    static String voiceStartWords(){
+        String why=precheck(true);if(why!=null)return why;
+        MAIN.postDelayed(()->{String r=startWords(wordsSeconds(),wordsShuffle());if(r!=null)note="语音开始失败："+r;},1500);
+        return "背单词已开始，手机可调节奏";
+    }
 
     private static void spawn(final long e,final String key){
         Thread t=new Thread(()->{HttpURLConnection http=null;String why="流已结束";
@@ -149,14 +180,14 @@ public final class WatchController {
             final String w=why;MAIN.post(()->onDrop(e,w,key));},"TurboIO-watch");
         t.setDaemon(true);t.start();
     }
-    private static void onText(long e,String text){if(e!=epoch||!running)return;lastText=text;lastData=SystemClock.elapsedRealtime();attempt=0;note="行情更新中";String p=NavGlasses.phase();if(p.equals("ready")||p.equals("starting"))NavGlasses.offer(text);}
-    private static void onDrop(long e,String why,String key){if(e!=epoch||!running)return;attempt++;long d=WatchSession.backoff(attempt);note="行情流断开（"+why+"），"+d/1000+" 秒后重连";MAIN.postDelayed(()->{if(e==epoch&&running)spawn(e,key);},d);}
+    private static void onText(long e,String text){if(e!=epoch||!running)return;lastText=text;lastData=SystemClock.elapsedRealtime();attempt=0;note=task.equals("盯盘")?"行情更新中":"单词更新中";String p=NavGlasses.phase();if(p.equals("ready")||p.equals("starting"))NavGlasses.offer(text);}
+    private static void onDrop(long e,String why,String key){if(e!=epoch||!running)return;attempt++;long d=WatchSession.backoff(attempt);note=task+"流断开（"+why+"），"+d/1000+" 秒后重连";MAIN.postDelayed(()->{if(e==epoch&&running)spawn(e,key);},d);}
 
     private static final Runnable tick=new Runnable(){public void run(){
         if(!running)return;long now=SystemClock.elapsedRealtime();String phase=NavGlasses.phase();
         WatchSession.Act act=WatchSession.onTick(now,sessionStart,phase,renewing,closeAt);
         if(act==WatchSession.Act.RENEW){renewing=true;closeAt=now;note="会话满 55 分钟，续期中";NavGlasses.renew();}
-        else if(act==WatchSession.Act.REOPEN){renewing=false;if(!NavGlasses.startCaption(lastText.isEmpty()?"盯盘连接中…":lastText)){stop("续期后无法重新打开显示："+NavGlasses.status());return;}sessionStart=now;note="已续期";}
+        else if(act==WatchSession.Act.REOPEN){renewing=false;if(!NavGlasses.startCaption(lastText.isEmpty()?task+"连接中…":lastText)){stop("续期后无法重新打开显示："+NavGlasses.status());return;}sessionStart=now;note="已续期";}
         else if(act==WatchSession.Act.STOP){stop(WatchSession.stopReason(phase,renewing));return;}
         MAIN.postDelayed(this,1000);
     }};

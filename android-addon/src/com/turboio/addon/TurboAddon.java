@@ -169,14 +169,15 @@ public final class TurboAddon {
         try {
             String currentSid = str(get(response, "SessionId"));
             if (!sid.isEmpty() && !currentSid.isEmpty() && !sid.equals(currentSid)) { diagnostic="NLP 与 ASR 会话不匹配，保留官方"; return false; }
-            // bill 分支(盯盘):「开始盯盘 / 停止盯盘」本地执行,不发模型;放在 eligible 之前是因为官方 NLP 未必把它归为 chat。
+            // bill 分支(盯盘/背单词):「开始/停止盯盘」「开始/停止背单词」本地执行,不发模型;放在 eligible 之前是因为官方 NLP 未必把它归为 chat。
             WatchVoice.Command watchCmd = WatchVoice.match(question);
             if (watchCmd != WatchVoice.Command.NONE && get(response, "Command") == null && !Boolean.TRUE.equals(get(response, "Offline"))) {
                 if (owns) return true;
                 template = copy(response, "", false); owns = true; done = false; emitted = "";
                 long watchToken = generation; replacements++;
-                String watchAnswer = watchCmd == WatchVoice.Command.START ? WatchController.voiceStart() : WatchController.voiceStop();
-                diagnostic = "本地指令：盯盘 " + watchCmd + " → " + watchAnswer;
+                String watchAnswer = watchCmd == WatchVoice.Command.START ? WatchController.voiceStart() : watchCmd == WatchVoice.Command.STOP ? WatchController.voiceStop()
+                    : watchCmd == WatchVoice.Command.START_WORDS ? WatchController.voiceStartWords() : WatchController.voiceStopWords();
+                diagnostic = "本地指令：" + watchCmd + " → " + watchAnswer;
                 MAIN.postDelayed(() -> emit(watchToken, watchAnswer, true, null), 300);
                 return true;
             }

@@ -52,6 +52,12 @@ public final class WatchTest {
         check(WatchVoice.match("停止盯盘") == Command.STOP && WatchVoice.match("关掉盯盘") == Command.STOP);
         check(WatchVoice.match("帮我分析一下盯盘策略") == Command.NONE && WatchVoice.match("盯盘") == Command.NONE && WatchVoice.match("") == Command.NONE && WatchVoice.match(null) == Command.NONE);
         check(WatchVoice.match("开始盯盘螺纹钢") == Command.NONE);
+        // 背单词(2026-10-20):panel 事件与 quote 同义;新语音词表不与盯盘混淆
+        check("apple  /ˈæpl/\nn. 苹果".equals(WatchStream.text("{\"type\":\"panel\",\"text\":\"apple  /ˈæpl/\\nn. 苹果\",\"index\":3,\"total\":120}")));
+        check(WatchVoice.match("开始背单词") == Command.START_WORDS && WatchVoice.match("背单词。") == Command.START_WORDS && WatchVoice.match("单词 模式") == Command.START_WORDS);
+        check(WatchVoice.match("停止背单词") == Command.STOP_WORDS && WatchVoice.match("不背了") == Command.STOP_WORDS && WatchVoice.match("退出单词模式") == Command.STOP_WORDS);
+        check(WatchVoice.match("帮我背单词 serendipity 什么意思") == Command.NONE && WatchVoice.match("单词") == Command.NONE);
+        check(WatchVoice.match("开始盯盘") == Command.START && WatchVoice.match("停止盯盘") == Command.STOP);
         System.out.println("PASS " + checks + " watch checks");
     }
 }

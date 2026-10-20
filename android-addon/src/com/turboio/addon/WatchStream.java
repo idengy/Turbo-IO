@@ -59,11 +59,11 @@ public final class WatchStream {
         return null;
     }
 
-    /** quote 事件返回面板文字;error 事件抛 IllegalStateException(message);其他事件返回 null。 */
+    /** quote / panel 事件返回面板文字(panel = 背单词,2026-10-20);error 事件抛 IllegalStateException(message);其他事件返回 null。 */
     public static String text(String json) {
         String type = stringField(json, "type");
         if ("error".equals(type)) throw new IllegalStateException(orDefault(stringField(json, "message"), "行情源错误"));
-        if (!"quote".equals(type)) return null;
+        if (!"quote".equals(type) && !"panel".equals(type)) return null;
         return orDefault(stringField(json, "text"), "");
     }
 

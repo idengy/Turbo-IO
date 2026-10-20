@@ -20,11 +20,13 @@ from urllib.parse import parse_qs, urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import watch  # noqa: E402  盯盘推流与排版(同目录)
+import words  # noqa: E402  背单词排版与牌组(同目录)
 
 HOST, PORT = "127.0.0.1", int(os.environ.get("GATEWAY_PORT", "8650"))
 HERMES_HOST, HERMES_PORT = "127.0.0.1", int(os.environ.get("HERMES_PORT", "8642"))
 KB_ROOT = Path(os.environ.get("FUTURES_KB_ROOT", "/Users/dyb/PROJECT/futures-kb"))
 KB_PY = KB_ROOT / "venv/bin/python"
+WORDS_DIR = Path(os.environ.get("WORDS_DIR", str(Path(__file__).resolve().parents[2] / "local/words")))
 CACHE_TTL = 20.0
 DEFAULT_TOP = 8
 QUOTE_WORDS = ("行情", "多少钱", "现价", "报价", "价格", "多少点", "盘面", "自选", "报个价", "报一下")
@@ -134,6 +136,15 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         url = urlsplit(self.path)
         path = url.path.rstrip("/")
+        if path.endswith("/v1/words/status") or path.endswith("/v1/words/stream"):
+            if not self._authorized():
+                return self._json(401, {"error": {"message": "unauthorized"}})
+            query = parse_qs(url.query)
+            if path.endswith("/v1/words/status"):
+                with self.deck_lock:
+                    return self._json(200, self.deck.status())
+            return self._words(words.clamp_seconds(query.get("seconds", [""])[0]), "shuffle" if query.get("order", [""])[0] == "shuffle" else "seq",
+                               query.get("probe", ["0"])[0] == "1")
         if path.endswith("/v1/watch/names") or path.endswith("/v1/watch/stream") or path.endswith("/v1/watch/resolve"):
             if not self._authorized():
                 return self._json(401, {"error": {"message": "unauthorized"}})
@@ -204,6 +215,42 @@ class Handler(BaseHTTPRequestHandler):
         finally:
             self.hub.release(stream)
             log.info("watch end names=%s", ",".join(names))
+
+    def _words(self, seconds: int, order: str, probe: bool):
+        """背单词 SSE:每 `seconds` 一帧;一个词多帧时逐帧发完再取下一个词;probe=1 循环发标尺帧不动游标;
+        词库空发 error 后关;两帧间隔 >HEARTBEAT 时补 `: hb` 心跳。"""
+        log.info("words start seconds=%d order=%s probe=%s", seconds, order, probe)
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream"); self.send_header("Cache-Control", "no-cache")
+        self.send_header("Transfer-Encoding", "chunked"); self.end_headers()
+        pending: list[tuple[str, int, int]] = []  # (text, index, total)
+        rulers = words.ruler_frames()
+        try:
+            while True:
+                if not pending:
+                    if probe:
+                        pending = [(fr, i + 1, len(rulers)) for i, fr in enumerate(rulers)]
+                    else:
+                        try:
+                            with self.deck_lock:
+                                entry, index, total = self.deck.next(order)
+                        except LookupError as e:
+                            self._write_chunk(("data: " + json.dumps({"type": "error", "message": str(e)}, ensure_ascii=False) + "\n\n").encode())
+                            break
+                        pending = [(fr, index, total) for fr in words.layout(entry)]
+                text, index, total = pending.pop(0)
+                self._write_chunk(("data: " + json.dumps({"type": "panel", "text": text, "index": index, "total": total}, ensure_ascii=False) + "\n\n").encode())
+                waited = 0.0
+                while waited < seconds:
+                    step = min(words.HEARTBEAT, seconds - waited)
+                    time.sleep(step); waited += step
+                    if waited < seconds:
+                        self._write_chunk(b": hb\n\n")
+            self.wfile.write(b"0\r\n\r\n"); self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, TimeoutError):
+            log.info("words client went away")
+        self.close_connection = True  # 流结束就关,不再按 HTTP/1.1 keep-alive 去读下一请求(客户端早走了,只会刷 reset 栈)
+        log.info("words end")
 
     def do_POST(self):
         length = int(self.headers.get("Content-Length") or 0)
@@ -290,6 +337,8 @@ def main():
         log.warning("API_SERVER_KEY not found in ~/.hermes/.env; quote fast-path disabled, everything forwards")
     Handler.quotes = Quotes()
     Handler.hub = watch.StreamHub([str(KB_PY), "-m", "kb", "stream"], KB_ROOT, log)
+    Handler.deck = words.Deck(WORDS_DIR); Handler.deck_lock = threading.Lock()
+    log.info("word deck: %d entries from %s", Handler.deck.total(), WORDS_DIR)
     log.info("variety names loaded: %d (+%d aliases)", len(Handler.quotes.names), len(Handler.quotes.aliases))
     srv = ThreadingHTTPServer((HOST, PORT), Handler)
     srv.daemon_threads = True

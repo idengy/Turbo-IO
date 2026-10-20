@@ -42,6 +42,14 @@
 - [x] C4 2026-10-20 09:2x–09:31(手机时钟):传输 type7 出 236/入 236、type8 入 101、type9 入 1(安装结果);眼镜自然重启回首页、实体旋钮正常(Bill 确认);插件「连接历史不完整,保持锁定」→ Bill 点「允许只读回查」→「解除结果保护」→ 最终 **人工验收已记录;阶段 LOCKED、授权 0、结果保护 未开始**,拦截 0。**Android 1.0.6(216)+ vivo X Fold 5 + TMIG1 首次实刷完成**。**功能复核 2026-10-20 Bill 确认全部正常:TMIG1 新菜单齐全、官方语音/录音/字幕正常、Hermes 问答正常、关于本机 1.0.5.5。B/C 段关闭,下一步 C5 / 阶段 4 仪表盘**
 - [ ] C5 刷后:仪表盘卡片 / 小应用接 `kb quotes --json`(阶段 4 原计划)
 
+### 背单词模式(2026-10-20 Bill 定,方案 ~/.claude/plans/ticklish-growing-simon.md)
+有道单词本 → 眼镜文字面板循环显示「单词 / 音标 / 释义」,**不出声**。排版、节奏、顺序、词库全在网关(改了即生效);插件只把盯盘的 SSE 壳换个流地址。产物 **r7** guarded 包(在 r6 `04e95ff0…` 之上;r6 的盯盘验收项一并验)。
+- [x] W0 文档先行(2026-10-20):CLAUDE.md 目录约定 + 改动记录、custom/README「背单词」一节、本块
+- [x] W1 网关(2026-10-20 完成):`words.py`(load 热重载 / layout 折行拆帧 / Deck 游标持久化 / ruler_frames)+ `youdao_sync.py`(Cookie 分页拉取、原始 JSON 落盘、`--xml` 备选、Cookie 失效不覆盖)+ `gateway.py` 路由 `/v1/words/status`、`/v1/words/stream?seconds&order&probe` + `tests/test_words.py` 20 条。**验收:unittest 全过(27);scratch 实例 8651 + 3 词样本 curl:3 s 一帧、index 1→2→3、长音标自动换行、断开重连接着上次(回到 1 属循环到头)、probe 两帧标尺、无 Key 401;LaunchAgent kickstart 后 8650 `/v1/words/status` total 0(词库还没同步)。** 坑:原有 `test_watch.test_hub_parses_lines_and_reaps_after_release` 偶发失败(6 跑 2 败,子进程回收时序),与本次无关,待修。修了一处:流结束置 `close_connection`,否则 HTTP/1.1 keep-alive 读下一请求时客户端已走、日志刷 reset 栈
+- [x] W2 插件(2026-10-20 完成):`WatchController.task` 参数化 + `startWords`/`startWordsProbe`/`voiceStartWords`;`WatchStream.text` 认 `panel`;`WatchVoice` 背单词词表;`TurboAddon.onNlp` 四路分发;新 `WordsUI`(每帧 4/6/8/10/15 s、随机开关、宽度探针);首页「背单词 ›」;`BackgroundWork` 文案;`WatchTest` 38 过。**链式 build && package && --guarded && verify --guarded exit 0(日志 `local/logs/build-r7.log`):r7 guarded-unsigned `51b463a3…`,guarded marker/lib 两项 true、unexpected 空;classes6.dex 含 WordsUI/startWords/`/v1/words/stream`;SUMS 已记;r6 产物改名 `*.r6-20261020`。** 待 Bill 签名装机
+- [ ] W3 Bill:Cookie 存 `local/config/youdao-cookie.txt` → `python3 custom/glasses-gateway/youdao_sync.py` 条数对得上有道网页;r7 签名装机(`bash custom/scripts/sign_guarded.sh`)
+- [ ] W4 实机:宽度探针读出英文/音标每行格数 → 改 `words.py` `ASCII_PER_CELL`(不重打包)→ 开始背单词眼镜循环显示;语音开始/停止;退后台继续;55 min 续期;停止后面板关闭。分层如实记
+
 ## 步骤
 - [x] 2026-10-16 克隆到 /Users/dyb/PROJECT/Turbo-IO;问清平台(Android)/刷机(愿意)/功能(三项);写 CLAUDE.md;加 upstream 远程;建工作分支 bill
 - [x] 阶段 1 环境与离线预览(2026-10-16):`uv sync --locked` 成功;pytest 47 通过;city_weather 模板 build/check/preview 全过(.state/demo/weather.zip 2669 B、weather.svg);本机 serve 起来、writer token(device=bill_glasses,.state/writer.token)签发、backend_metrics.py 写入草稿 revision 2;server 已停

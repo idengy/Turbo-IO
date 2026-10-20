@@ -141,8 +141,29 @@ class SyncParseTest(unittest.TestCase):
                  {"itemName": "", "trans": "skip"}, {"word": "pear", "translation": "n. 梨", "bookId": "7"}]
         out = youdao_sync.normalize_web(items, {"0": "默认", "7": "考研"})
         self.assertEqual(len(out), 2)
-        self.assertEqual(out[0], {"id": "a1", "word": "apple", "phonetic": "ˈæpl", "trans": ["n. 苹果"], "book": "默认", "added": 1700000000})
+        self.assertEqual(out[0], {"id": "a1", "word": "apple", "phonetic": "ˈæpl", "trans": ["n. 苹果"], "book": "默认", "lang": "en", "added": 1700000000})
         self.assertEqual(out[1]["book"], "考研"); self.assertEqual(out[1]["id"], "pear")
+
+    def test_normalize_v2_list_shape(self):
+        # 2026-10-20 webwordbook 页面的 /webapi/v2/word/list 条目:只有 word/trans/itemId/lanFrom/lanTo,没有音标
+        items = [{"itemId": "x1", "word": "abandon", "trans": "v.抛弃，遗弃；（因危险）离开", "lanFrom": "en", "lanTo": "zh-CHS"}]
+        out = youdao_sync.normalize_web(items, {})
+        self.assertEqual(out[0]["word"], "abandon"); self.assertEqual(out[0]["phonetic"], "")
+        self.assertEqual(out[0]["trans"], ["v.抛弃，遗弃", "（因危险）离开"]); self.assertEqual(out[0]["lang"], "en")
+
+    def test_enrich_phonetics_uses_cache_and_skips_non_english(self):
+        with tempfile.TemporaryDirectory() as t:
+            cache = pathlib.Path(t) / "c.json"
+            calls = []
+            def fake(word, prefer): calls.append(word); return "fəʊn" if word == "phone" else ""
+            entries = [{"word": "phone", "phonetic": "", "lang": "en"}, {"word": "有", "phonetic": "", "lang": "zh-CHS"},
+                       {"word": "done", "phonetic": "dʌn", "lang": "en"}, {"word": "zzz", "phonetic": "", "lang": "en"}]
+            n = youdao_sync.enrich_phonetics(entries, cache, "us", lookup=fake, pause=0)
+            self.assertEqual((n, calls), (2, ["phone", "zzz"]))
+            self.assertEqual(entries[0]["phonetic"], "fəʊn"); self.assertEqual(entries[1]["phonetic"], ""); self.assertEqual(entries[2]["phonetic"], "dʌn")
+            calls.clear()
+            self.assertEqual(youdao_sync.enrich_phonetics(entries, cache, "us", lookup=fake, pause=0), 0)  # 第二次全部命中缓存
+            self.assertEqual(calls, [])
 
     def test_parse_xml(self):
         with tempfile.TemporaryDirectory() as t:

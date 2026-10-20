@@ -17,10 +17,11 @@ Bill 自己的功能代码与文档。子目录约定见根 CLAUDE.md「目录�
 
 有道词典单词本 → 眼镜业务 19 文字面板循环显示「单词 / 音标 / 释义」，**不出声**。排版、节奏、顺序、词库全部在网关（改了即生效），插件只把盯盘的 SSE→面板壳换一个流地址（`WatchController.task`）。
 
-**1. 拿到单词本（Bill 亲手，一次）**：Chrome 登录 https://dict.youdao.com/wordbook/wordlist （`/wordbook/` 本身是 404，2026-10-20 实测）→ 按 F12 打开 DevTools → Network 标签 → 刷新页面 → 点任意一条名字含 `webapi/words` 的请求 → 右侧 Headers → Request Headers → 找到 `Cookie:` 一行，复制冒号后面整段 → 存成 `local/config/youdao-cookie.txt`（一行，gitignored；不要贴进聊天）。
+**1. 拿到单词本（Bill 亲手，一次）**：Chrome 登录 https://www.youdao.com/webwordbook/wordlist （2026-10-20 实测：旧址 `dict.youdao.com/wordbook/` 是 404；这个新页面的接口是 `dict.youdao.com/wordbook/webapi/v2/word/list`，从页面 bundle 读出的）→ 看到单词卡片后按 F12 → Network 标签 → 点 **Fetch/XHR** 过滤 → 刷新页面 → 点名字为 **`list?limit=48&offset=0…`** 的请求（没有叫 `webapi/words` 的）→ 右侧 Headers → Request Headers → 找到 `Cookie:` 一行，复制冒号后面整段 → 存成 `local/config/youdao-cookie.txt`（一行，gitignored；不要贴进聊天）。必须选这条请求：它发往 dict.youdao.com，Cookie 才是接口要的那套；选 wordlist 文档那条拿到的是 www.youdao.com 的 Cookie，脚本会报 401。
 备选：有道 PC 版「单词本 → 导出」得到 XML，用 `--xml 文件` 读。
+手机 App 与网页条数不一致时：多半是两边登的账号不同（手机号 / 微信 / QQ 各是独立账号），或 App 没把本地词同步到云端；脚本拉的就是网页这个账号云端的词。
 
-**2. 同步**：`python3 custom/glasses-gateway/youdao_sync.py`（或 `--xml 导出.xml`）→ 写 `local/words/wordbook.json`，原始响应落 `local/words/raw/<时间>.json`。打印「写入 … N 词；单词本 {…}；无音标 M 词」，N 应等于有道网页端的总数。Cookie 过期时报「接口返回 0 条」退出 2，**不覆盖**旧词库——重新复制 Cookie 再跑。网关按文件 mtime 热重载，同步后不用重启。
+**2. 同步**：`python3 custom/glasses-gateway/youdao_sync.py`（或 `--xml 导出.xml`）→ 写 `local/words/wordbook.json`，原始响应落 `local/words/raw/<时间>.json`。网页列表接口不含音标，脚本用公开的 `dict.youdao.com/jsonapi`（免登录）逐词补英/美音标（默认美音，`--phonetic uk|none` 可改），结果缓存 `local/words/phonetic-cache.json`，下次只查新词。打印「写入 … N 词；单词本 {…}；本次新查音标 K 词；仍无音标 M 词」，N 应等于有道网页端的总数。Cookie 过期时报「401 用户未登录」或「接口返回 0 条」并以非 0 退出，**不覆盖**旧词库——重新复制 Cookie 再跑。网关按文件 mtime 热重载，同步后不用重启。
 
 **3. 路由**（同一把 Bearer）：`GET /v1/words/status` → `{total, position, current_id, book_counts, updated, width, ascii_per_cell}`；`GET /v1/words/stream?seconds=6&order=seq|shuffle&probe=0|1` → SSE `data: {"type":"panel","text":"单词  /音标/\n释义…","index":n,"total":N}`，每 `seconds`（3–60）一帧，一个词释义太长拆成多帧（后续帧首行仍是单词），帧间隔 >10 s 补 `: hb`；`probe=1` 循环发标尺帧（数字 50 / 小写 52 / 汉字 24 / IPA / 混排）不动游标；词库空发 `{"type":"error"}` 后关。游标 `local/words/state.json`：顺序模式按添加时间倒序循环、断线重连与网关重启都接着上次；随机模式一轮内不重复。
 

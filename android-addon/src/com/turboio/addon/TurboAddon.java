@@ -49,6 +49,11 @@ public final class TurboAddon {
     // bill 分支 r9:本地指令(盯盘/背单词)的终态回灌改为「先发非终态一段,等官方本轮 onResponseComplete 到了再发终态」,
     // 模仿自有模型路径的时序(模型路径的终态永远晚于官方完成)。lastLocal 单独保存最近一次本地指令的官方归类与时序,不被 emit 的 diagnostic 覆盖。
     private static boolean localPending; private static long localToken, localAt, localOfficialAt; private static String localAnswer = "", lastLocal = "无";
+    // r11(2026-10-20):官方对「开始盯盘」这类句子的响应自带 hasNextRound=true,宿主经 Dc/f→Flutter→s8/b「assistantControllerStartNextRound」
+    // 开下一轮拾音,语音框一直等;改模板副本没用(Flutter 拿的是原件)。对照实验证实单次终态本身被认可(测试回复后语音框自己关)。
+    // 修法:本地指令终态发出后,若官方原件 next=true,再调宿主自己的收尾 p8/c.s(null,true,false)(Flutter「stopAssistantInternal」同一入口,
+    // phoneExit=true 给眼镜发 phone_exit 关语音框;官方「退出」意图走同一方法但不发 phone_exit)。localStop 是诊断开关。
+    private static boolean localNext; static boolean localStop = true;
     private static int asrFinals, replacements, completions;
     private static final java.util.concurrent.atomic.AtomicInteger modelRequests = new java.util.concurrent.atomic.AtomicInteger();
     private static volatile int lastHttp;
@@ -188,7 +193,7 @@ public final class TurboAddon {
                 String watchAnswer = watchCmd == WatchVoice.Command.START ? WatchController.voiceStart() : watchCmd == WatchVoice.Command.STOP ? WatchController.voiceStop()
                     : watchCmd == WatchVoice.Command.START_WORDS ? WatchController.voiceStartWords() : WatchController.voiceStopWords();
                 diagnostic = "本地指令：" + watchCmd + " → " + watchAnswer + " · 官方归类 " + origin;
-                localPending = true; localToken = watchToken; localAnswer = watchAnswer; localAt = SystemClock.elapsedRealtime(); localOfficialAt = 0;
+                localPending = true; localToken = watchToken; localAnswer = watchAnswer; localAt = SystemClock.elapsedRealtime(); localOfficialAt = 0; localNext = Boolean.TRUE.equals(get(response, "HasNextRound"));
                 lastLocal = watchCmd + " 官方归类 " + origin + " · 等官方完成…";
                 MAIN.postDelayed(() -> emit(watchToken, watchAnswer, false, null), 300);
                 MAIN.postDelayed(() -> localFinal(watchToken, "8 秒未等到官方完成"), 8000);
@@ -235,6 +240,22 @@ public final class TurboAddon {
         long now = SystemClock.elapsedRealtime();
         lastLocal = lastLocal.replace(" · 等官方完成…", "") + " · 终态=" + why + " · 官方完成 " + (localOfficialAt == 0 ? "未到" : (localOfficialAt - localAt) + " ms") + " · 终态发出 " + (now - localAt) + " ms";
         emit(token, localAnswer, true, null);
+        if (!localNext) lastLocal += " · 收尾=无需(next=false)";
+        else if (!localStop) lastLocal += " · 收尾=已关闭开关";
+        else MAIN.postDelayed(() -> stopAssistant(token), 800);
+    }
+    /** r11:调宿主 AiRuntimePlugin(p8/c)的 s(String,boolean,boolean) = stop_assistant + phone_exit。外层实例从被 hook 的监听器(内部类)字段取,按「字段类型有 s(String,Z,Z)」找,不钉字段名。 */
+    private static void stopAssistant(long token) {
+        if (token != generation || listener == null) { lastLocal += " · 收尾=跳过(新一轮已开始)"; return; }
+        try {
+            Object outer = null;
+            for (java.lang.reflect.Field f : listener.getClass().getDeclaredFields()) {
+                try { f.getType().getMethod("s", String.class, boolean.class, boolean.class); f.setAccessible(true); outer = f.get(listener); break; } catch (NoSuchMethodException ignored) {}
+            }
+            if (outer == null) throw new NoSuchFieldException("outer");
+            invokeTyped(outer, "s", new Class<?>[]{String.class, boolean.class, boolean.class}, new Object[]{null, true, false});
+            lastLocal += " · 收尾=stop_assistant+phone_exit 已调";
+        } catch (Exception e) { lastLocal += " · 收尾失败=" + e.getClass().getSimpleName(); }
     }
     private static void invoke(Object target, String method, Object... values) throws Exception {
         Class<?>[] signature = new Class<?>[values.length];

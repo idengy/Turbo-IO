@@ -32,6 +32,7 @@ final class WatchUI {
   final TextView[] lines=new TextView[1];
   lines[0]=EditorialUI.button(a,diag,"每屏行数 max_lines="+NavGlasses.captionLines+"（点按切换 5 / 8 / 10，下一次开始生效）",false,()->{int cur=NavGlasses.captionLines;int next=cur<8?8:cur<10?10:5;NavGlasses.captionLines=next;lines[0].setText("每屏行数 max_lines="+next+"（点按切换 5 / 8 / 10，下一次开始生效）");});
   EditorialUI.toggle(a,diag,"停止前先发一帧空白清屏（若停止后行情仍留在镜片上再开）",NavGlasses.clearBeforeClose,(v,on)->NavGlasses.clearBeforeClose=on);
+  EditorialUI.toggle(a,diag,"语音指令后主动收尾官方助手（官方 next=true 时调 stop_assistant+phone_exit 关语音框；若它把面板也关了就关掉此开关）",TurboAddon.localStop,(v,on)->TurboAddon.localStop=on);
   EditorialUI.button(a,diag,"盯盘测试 · 合成 5 行行情 3 分钟",false,()->run(a,WatchController.startTest()));
   EditorialUI.button(a,diag,"宽度探针 · 5 行递增长度",false,()->run(a,WatchController.startProbe("width")));
   EditorialUI.button(a,diag,"替换/追加探针 · A 帧 4 秒后 B 帧",false,()->run(a,WatchController.startProbe("append")));

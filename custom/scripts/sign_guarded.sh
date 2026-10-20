@@ -58,4 +58,4 @@ echo "$sha  ../build/$(basename "$SIGNED")  # guarded 签名包 $(date +%F),unsi
 echo
 echo "DONE 签名包: $SIGNED"
 echo "SHA-256:    $sha  (已追加到 $SUMS;填进 FLASH_GUIDE 第 4 节记录表)"
-echo "下一步按 custom/docs/FLASH_GUIDE.md 第 2 节第 1 步:adb install -r $SIGNED(Bill 亲手)"
+echo "下一步按 custom/docs/FLASH_GUIDE.md 第 2 节第 1 步:adb install -r --no-incremental $SIGNED(Bill 亲手;--no-incremental 避免 vivo 桌面图标在增量安装后消失,2026-10-20 r12 踩过)"

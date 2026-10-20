@@ -59,7 +59,7 @@
 ## 2. 刷机四步(Android 官方链路 + TMIG1,每步有停止条件)
 
 ### 第 1 步 覆盖安装 guarded 包、确认入口
-- 手机连 Mac,`adb install -r local/build/<签名 guarded 包>`;装后 `adb shell pm path com.rayneo.venus.pub` 取 base.apk 算 sha256 与签名包一致。登录、配对应保留;若提示签名冲突,停(说明 keystore 不对),不要卸载重装。
+- 手机连 Mac,`adb install -r --no-incremental local/build/<签名 guarded 包>`(**加 `--no-incremental`**:2026-10-20 r12 用默认的 Incremental Install 装完后 OriginOS 桌面图标消失,包本身完整、`am start` 能起,只是 vivo 桌面对 incremental-fs 挂载的包不刷新图标);装后 `adb shell pm path com.rayneo.venus.pub` 取 base.apk 算 sha256 与签名包一致。登录、配对应保留;若提示签名冲突,停(说明 keystore 不对),不要卸载重装。
 - 打开 Turbo IO → 设置/诊断 → **实验固件升级**。必须出现标题 **「官方升级 · 单次授权」**,状态第一行 **`ANDROID-106 · OFFICIAL-OTA-GUARD-01 · TMIG1`**,候选行 `TMIG1 · Strix OS 1.0.5.5 新底座迁移`,`阶段:LOCKED`、`授权:0`。
 - 若只弹「本安装包没有为当前宿主版本安装 OTA 队列/文件门禁…已禁用」,说明装的是 A 段包而不是 guarded 包,停。
 - 顺手复核 A 段功能没坏:语音问答(Hermes)、录音分享、官方配对。**这一步也是在验证「两个宿主类搬进 classes5.dex」没有把官方蓝牙发送弄坏**:能正常配对、语音有回应即可。
@@ -97,6 +97,7 @@
 | 现象 | 处理 |
 | --- | --- |
 | `adb install -r` 签名冲突 | 停;核 keystore / alias / 证书指纹 `4f941f05…`,不要卸载官方数据 |
+| 装完桌面图标消失 | 先 `adb shell pm path com.rayneo.venus.pub` 与 `dumpsys package` 看 installed=true 且 sha 一致 → 包没丢;用应用抽屉搜索或 `adb shell am start -n com.rayneo.venus.pub/com.rayneo.venus.MainActivity` 拉起;下次用 `--no-incremental` 装 |
 | 插件只弹「已禁用」 | 装的不是 guarded 包;重签正确的包 |
 | 配对/语音在第 1 步就不正常 | 停;可能是 classes5 搬类影响了官方蓝牙发送,装回 A 段 r2 签名包(`abe3b10f…`),把 logcat 给 Claude |
 | 更新说明不出现 TMIG1 GUARDED | 查来源是否开放、是否选对 zip、15 分钟是否过期;授权前可重做第 2 步 |

@@ -11,14 +11,14 @@ final class WatchUI {
   // 品种:搜索框添加(品种 / 品种+月份),列表可移除,最多 5 个
   LinearLayout card=EditorialUI.card(a,b);TextView head=EditorialUI.text(a,"合约（最多 5 个，按添加顺序显示）",15,EditorialUI.INK);card.addView(head);
   LinearLayout list=new LinearLayout(a);list.setOrientation(LinearLayout.VERTICAL);card.addView(list);
-  Runnable render=()->{list.removeAllViews();List<String> chosen=WatchController.names();head.setText("合约（已选 "+chosen.size()+"/5，按添加顺序显示）");
+  final Runnable[] render=new Runnable[1];render[0]=()->{list.removeAllViews();List<String> chosen=WatchController.names();head.setText("合约（已选 "+chosen.size()+"/5，按添加顺序显示）");
    if(chosen.isEmpty())list.addView(EditorialUI.text(a,"还没有合约。在下面输入「铁矿 2701」「螺纹钢」这样的名字后点添加；不写月份就是主力连续。",14,EditorialUI.MUTED));
    for(String label:chosen){LinearLayout row=new LinearLayout(a);row.setGravity(android.view.Gravity.CENTER_VERTICAL);TextView t=EditorialUI.text(a,label,16,EditorialUI.INK);row.addView(t,new LinearLayout.LayoutParams(0,-2,1));
-    TextView rm=EditorialUI.text(a,"移除",14,EditorialUI.LIME);rm.setPadding(EditorialUI.dp(a,12),EditorialUI.dp(a,8),EditorialUI.dp(a,4),EditorialUI.dp(a,8));rm.setOnClickListener(v->{List<String> now=new ArrayList<>(WatchController.names());now.remove(label);WatchController.names(now);render();});row.addView(rm);list.addView(row);}};
-  render.run();
+    TextView rm=EditorialUI.text(a,"移除",14,EditorialUI.LIME);rm.setPadding(EditorialUI.dp(a,12),EditorialUI.dp(a,8),EditorialUI.dp(a,4),EditorialUI.dp(a,8));rm.setOnClickListener(v->{List<String> now=new ArrayList<>(WatchController.names());now.remove(label);WatchController.names(now);render[0].run();});row.addView(rm);list.addView(row);}};
+  render[0].run();
   EditText input=NewsUI.input(a,card,"例：铁矿 2701 / 白糖 701 / 螺纹钢（主连）","");
   EditorialUI.button(a,card,"添加",false,()->{String q=input.getText().toString().trim();if(q.isEmpty())return;List<String> now=new ArrayList<>(WatchController.names());if(now.size()>=WatchController.MAX_NAMES){EditorialUI.notice(a,"最多 5 个，先移除一个");return;}
-   WatchController.resolve(q,(label,display,failure)->{if(failure!=null){EditorialUI.notice(a,failure);return;}List<String> cur=new ArrayList<>(WatchController.names());if(cur.contains(label)){EditorialUI.notice(a,label+" 已在列表");return;}if(cur.size()>=WatchController.MAX_NAMES){EditorialUI.notice(a,"最多 5 个，先移除一个");return;}cur.add(label);WatchController.names(cur);input.setText("");render.run();});});
+   WatchController.resolve(q,(label,display,failure)->{if(failure!=null){EditorialUI.notice(a,failure);return;}List<String> cur=new ArrayList<>(WatchController.names());if(cur.contains(label)){EditorialUI.notice(a,label+" 已在列表");return;}if(cur.size()>=WatchController.MAX_NAMES){EditorialUI.notice(a,"最多 5 个，先移除一个");return;}cur.add(label);WatchController.names(cur);input.setText("");render[0].run();});});
   // 诊断
   LinearLayout diag=EditorialUI.card(a,b);diag.addView(EditorialUI.text(a,"诊断 · 面板探针（固件或 App 升级后复测）",15,EditorialUI.INK));
   EditorialUI.toggle(a,diag,"字号 1（默认 2，下一次开始生效）",NavGlasses.captionFont==1,(v,on)->NavGlasses.captionFont=on?1:2);

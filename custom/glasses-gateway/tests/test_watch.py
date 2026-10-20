@@ -35,6 +35,8 @@ class FormatTest(unittest.TestCase):
         self.assertEqual(watch.line("螺纹钢", row, compact=1), "螺纹 3215 +0.62")
         self.assertEqual(watch.line("螺纹钢", row, compact=2), "螺纹3215 +0.62")
         self.assertEqual(watch.line("铁矿石", {"last": 781.5, "chg_pct": -0.19}, 1), "铁矿 781.5 -0.19")
+        self.assertEqual(watch.line("铜", {"last": 109110.0, "chg_pct": -0.67}), "铜 109110 -0.67%")  # 默认 compact=0,18 格 ≤ WIDTH
+        self.assertLessEqual(watch.WIDTH, 19); self.assertEqual(watch.COMPACT, 0)
         self.assertEqual(watch.line("豆粕", {"last": 2890.0, "chg_pct": None}, 1), "豆粕 2890 --")
         self.assertEqual(watch.line("黄金", None, 1), "黄金 -- --")
         self.assertEqual(watch.line("黄金", {"last": None}, 1), "黄金 -- --")
@@ -47,7 +49,7 @@ class FormatTest(unittest.TestCase):
         self.assertEqual(len(four.split("\n")), 5)
         self.assertEqual(len(five.split("\n")), 5)
         self.assertTrue(five.startswith("螺纹 "))
-        self.assertEqual(watch.format_panel(rows, ["铜"], "").split("\n"), ["铜 104 +0.40"])  # 无 asof 不加时钟
+        self.assertEqual(watch.format_panel(rows, ["铜"], "").split("\n"), ["铜 104 +0.40%"])  # 无 asof 不加时钟
 
     def test_order_follows_request(self):
         rows = {"铜": {"last": 1.0, "chg_pct": 0.0}, "螺纹钢": {"last": 2.0, "chg_pct": 0.0}}

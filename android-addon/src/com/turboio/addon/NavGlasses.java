@@ -14,11 +14,13 @@ public final class NavGlasses {
     static int captionFont=2;private static int closeCompleted,closeFailed;
     // 盯盘续期:renew() 置 autoIdle 后发 type3;SDK 确认关闭帧送达即自动回 idle(不等用户确认),失败仍走 uncertain。其他调用方语义不变。
     private static boolean autoIdle;
+    // 盯盘 P0 诊断:业务 19 入站帧按类型计数(不限 sid),用来查眼镜长按退出时到底回了什么。
+    private static final int[] inbound=new int[16];private static String lastInbound="无";
     private static long deadline,started,lastSend;private static boolean pending;
     private static Runnable changed;
     public static void listen(Runnable r){changed=r;}
     private static void mark(String p,String n){phase=p;note=n;if(changed!=null)changed.run();}
-    public static String status(){return note+" · "+phase+" · 文字提交 "+textSubmitted+" / SDK完成 "+textCompleted+" · 关闭回执 "+closeCompleted+"/"+closeFailed+" · "+(navigationSession?"路线":"测试");}
+    public static String status(){return note+" · "+phase+" · 文字提交 "+textSubmitted+" / SDK完成 "+textCompleted+" · 关闭回执 "+closeCompleted+"/"+closeFailed+" · 入站 t3="+inbound[3]+" t4="+inbound[4]+" t8="+inbound[8]+" 其他="+inbound[0]+" 最近 "+lastInbound+" · "+(navigationSession?"路线":"测试");}
     public static String phase(){return phase;}
     public static boolean active(){return !phase.equals("idle");}
     private static Object manager()throws Exception{return NavReflect.field(NavReflect.type("E3.u"),"h");}
@@ -86,6 +88,7 @@ public final class NavGlasses {
             if(HostBusiness.id(m.get("businessId"))!=19)return;
             Object bytes=m.get("payload");if(!(bytes instanceof byte[]))return;
             NavCore.Envelope e=NavCore.decode((byte[])bytes);if(e==null)return;
+            {int t=e.type>=0&&e.type<16&&(e.type==3||e.type==4||e.type==8)?e.type:0;inbound[t]++;String sidIn=e.type==4?"":new JSONObject(e.json).optString("sid");lastInbound="t"+e.type+(e.type==4?"":sidIn.equals(sid)?"(本会话)":"(他会话)")+" "+(e.type==4?"":e.json.length()>60?e.json.substring(0,60):e.json);}
             // Audio bodies are not retained, parsed or uploaded.
             final JSONObject j=e.type==4?new JSONObject():new JSONObject(e.json);
             MAIN.post(()->{if(!device.equals(d))return;if(e.type==4){stop();return;}if(!sid.equals(j.optString("sid")))return;

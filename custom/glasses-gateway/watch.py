@@ -1,0 +1,213 @@
+"""盯盘推流(2026-10-20):给眼镜业务 19 文字面板排版 5 行行情,并管理 futures-kb `kb stream` 子进程。
+纯标准库、无导入副作用(可单测)。被 gateway.py 的 /v1/watch/* 路由使用。
+- format_panel:每行「短名 价格 涨跌」;≤4 个品种时首行加 HH:MM:SS(5 个品种时不占位;非交易时段价格不动,
+  没有时钟就看不出流是否活着);缺行打「短名 -- --」。WIDTH/COMPACT 由 P0 实机探针定。
+- Stream:一个 `kb stream 品种…` 子进程;读线程把 JSON 行并进 latest,version+1 并唤醒等待者;最后一个客户端
+  走后 30 s 回收(StreamHub);exit 1 退避 2/4/8…≤30 s 重启,exit 2 置 error 唤醒客户端。"""
+from __future__ import annotations
+
+import json
+import subprocess
+import threading
+import time
+
+# 短名:只收 3 字以上的标准名;2 字名原样。单测断言 65 个品种无碰撞。
+SHORT = {
+    "螺纹钢": "螺纹", "铁矿石": "铁矿", "热卷": "热卷", "不锈钢": "不锈", "氧化铝": "氧铝",
+    "棕榈油": "棕油", "玉米淀粉": "淀粉", "鸡蛋": "鸡蛋", "生猪": "生猪",
+    "碳酸锂": "锂", "工业硅": "工硅", "多晶硅": "多硅",
+    "燃料油": "燃油", "低硫燃料油": "低硫", "石油沥青": "沥青", "丁二烯橡胶": "丁二烯", "20号胶": "20胶",
+    "集运欧线": "集运", "国际铜": "国铜", "原油": "原油",
+    "聚丙烯": "PP", "乙二醇": "EG", "苯乙烯": "EB", "对二甲苯": "PX", "瓶片": "瓶片",
+    "液化石油气": "LPG", "纯碱": "纯碱", "玻璃": "玻璃", "烧碱": "烧碱", "短纤": "短纤",
+    "菜籽油": "菜油", "菜籽粕": "菜粕", "花生": "花生", "红枣": "红枣", "苹果": "苹果",
+    "棉纱": "棉纱", "硅铁": "硅铁", "锰硅": "锰硅", "尿素": "尿素",
+    "塑料": "塑料", "聚氯乙烯": "PVC", "纸浆": "纸浆", "原木": "原木", "粳米": "粳米",
+}
+WIDTH = 14      # 字号 2 每行可用的汉字宽度格数(P0-2 实测后改)
+COMPACT = 1     # 0: 「螺纹 3215 +0.62%」 1: 去掉 %  2: 再去掉短名后的空格
+CLOCK_MAX_NAMES = 4
+FRAME_INTERVAL = 1.0
+HEARTBEAT = 10.0
+
+
+def short(name: str) -> str:
+    if name in SHORT:
+        return SHORT[name]
+    return name if len(name) <= 2 else name[:2]
+
+
+def price(v) -> str:
+    if v is None:
+        return "--"
+    if v >= 100:
+        return f"{v:.0f}" if v == int(v) else f"{v:.1f}"
+    return f"{v:g}"
+
+
+def chg(v, compact: int = COMPACT) -> str:
+    if v is None:
+        return "--"
+    return f"{v:+.2f}" + ("" if compact >= 1 else "%")
+
+
+def line(name: str, row: dict | None, compact: int = COMPACT) -> str:
+    sep = "" if compact >= 2 else " "
+    if not row or row.get("last") is None:
+        return f"{short(name)}{sep}-- --"
+    return f"{short(name)}{sep}{price(row['last'])} {chg(row.get('chg_pct'), compact)}"
+
+
+def format_panel(rows: dict, names: list[str], asof: str = "", compact: int = COMPACT, clock: bool = True) -> str:
+    lines = []
+    if clock and asof and len(names) <= CLOCK_MAX_NAMES:
+        lines.append(asof[-8:])
+    for n in names:
+        lines.append(line(n, rows.get(n), compact))
+    return "\n".join(lines)
+
+
+def asof_of(rows: dict) -> str:
+    return max((r.get("time") or "" for r in rows.values()), default="")
+
+
+class Stream:
+    """一个 `kb stream` 子进程 + 最新快照。线程安全靠 cond。"""
+
+    def __init__(self, cmd: list[str], cwd, names: list[str], log):
+        self.cmd, self.cwd, self.names, self.log = list(cmd), cwd, list(names), log
+        self.cond = threading.Condition()
+        self.latest: dict[str, dict] = {}
+        self.version = 0
+        self.clients = 0
+        self.error: str | None = None
+        self.closed = False
+        self.attempt = 0
+        self.proc: subprocess.Popen | None = None
+        self.last_stderr = ""
+        self._spawn()
+
+    def _spawn(self):
+        self.proc = subprocess.Popen(self.cmd + self.names, cwd=self.cwd, stdin=subprocess.PIPE,
+                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8")
+        self.log.info("stream spawned pid=%s names=%s", self.proc.pid, ",".join(self.names))
+        threading.Thread(target=self._read_err, args=(self.proc,), daemon=True).start()
+        threading.Thread(target=self._read, args=(self.proc,), daemon=True).start()
+
+    def _read_err(self, proc):
+        for raw in proc.stderr:
+            s = raw.strip()
+            if s.startswith("{"):
+                self.last_stderr = s
+
+    def _read(self, proc):
+        for raw in proc.stdout:
+            try:
+                row = json.loads(raw)
+            except ValueError:
+                continue
+            name = row.get("name")
+            if not name:
+                continue
+            with self.cond:
+                self.latest[name] = row
+                self.version += 1
+                self.attempt = 0
+                self.cond.notify_all()
+        code = proc.wait()
+        with self.cond:
+            if self.closed:
+                return
+            if code == 2 or self.clients <= 0:
+                self.error = self.last_stderr or f"行情源退出({code})"
+                self.closed = True
+                self.log.warning("stream ended code=%s err=%s", code, self.error)
+                self.cond.notify_all()
+                return
+            self.attempt += 1
+            delay = min(2 ** self.attempt, 30)
+            self.log.warning("stream exited code=%s, respawn in %ss", code, delay)
+        time.sleep(delay)
+        with self.cond:
+            if self.closed:
+                return
+        self._spawn()
+
+    def close(self):
+        with self.cond:
+            self.closed = True
+            proc = self.proc
+            self.cond.notify_all()
+        if proc is None:
+            return
+        try:
+            proc.stdin.close()
+        except Exception:
+            pass
+        try:
+            proc.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            proc.terminate()
+            try:
+                proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+        for f in (proc.stdout, proc.stderr):
+            try:
+                f.close()
+            except Exception:
+                pass
+        self.log.info("stream closed pid=%s", proc.pid)
+
+
+class StreamHub:
+    """按品种元组复用 Stream;最后一个客户端走后 idle 秒回收。"""
+
+    def __init__(self, cmd: list[str], cwd, log, idle: float = 30.0):
+        self.cmd, self.cwd, self.log, self.idle = list(cmd), cwd, log, idle
+        self.lock = threading.Lock()
+        self.streams: dict[tuple, Stream] = {}
+        self.timers: dict[tuple, threading.Timer] = {}
+
+    def acquire(self, names: list[str]) -> Stream:
+        key = tuple(names)
+        with self.lock:
+            t = self.timers.pop(key, None)
+            if t:
+                t.cancel()
+            s = self.streams.get(key)
+            if s is None or s.closed:
+                s = Stream(self.cmd, self.cwd, names, self.log)
+                self.streams[key] = s
+            with s.cond:
+                s.clients += 1
+            return s
+
+    def release(self, s: Stream):
+        key = tuple(s.names)
+        with s.cond:
+            s.clients = max(0, s.clients - 1)
+            remaining = s.clients
+        if remaining > 0:
+            return
+
+        def reap():
+            with self.lock:
+                self.timers.pop(key, None)
+                with s.cond:
+                    if s.clients > 0:
+                        return
+                if self.streams.get(key) is s:
+                    del self.streams[key]
+            s.close()
+            self.log.info("stream closed (idle) names=%s", ",".join(s.names))
+
+        with self.lock:
+            t = threading.Timer(self.idle, reap)
+            t.daemon = True
+            self.timers[key] = t
+            t.start()
+
+    def active(self) -> int:
+        with self.lock:
+            return sum(1 for s in self.streams.values() if not s.closed)

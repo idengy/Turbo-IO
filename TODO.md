@@ -1,7 +1,14 @@
 # TODO
 
 ## 当前任务
-**B/C 段已于 2026-10-20 完成(眼镜在跑 TMIG1,手机 guarded r2 `27010e75…`,全部功能正常)。当前任务转到 C5 / 阶段 4:仪表盘卡片与小应用接 `kb quotes --json`。** 历史:B 段(2026-10-19 Bill 定,方案 ~/.claude/plans/wiggly-zooming-peach.md)把 Android 1.0.6 插件的 OTA 门禁从 1.0.5/TAP1 换成 1.0.6/TMIG1,C 段 Bill 亲手装机、下载、授权、实刷。
+**当前任务(2026-10-20 Bill 定,方案 ~/.claude/plans/jaunty-exploring-kettle.md):期货盯盘模式(秒级)**——业务 19 文字通道(`NavGlasses`)上眼镜 5 行行情、约 1 s 一帧;手机勾选 ≤5 品种;每行「名称 最新价 涨跌幅」;手机按钮 + 眼镜语音「开始/停止盯盘」;1 h 会话自动续开;后台靠 `BackgroundWork`。三层:futures-kb `kb stream`(常驻天勤会话推 JSON 行)→ 网关 `/v1/watch/stream` SSE(拉起/复用/回收子进程、限频、心跳、**排版**)→ 插件 `WatchController/WatchUI/WatchVoice`。
+- [ ] P0 实机探针:代码 + 构建 2026-10-19 完成——`NavGlasses` 关闭回执计数 + 字号可调;`WatchController.startTest/startProbe`;`WatchUI` 探针页;首页「期货盯盘 ›」;`sign_guarded.sh` 改从 audit.json 读 SHA。`build.sh` exit 0(dex `ce46ee90…`),**guarded-unsigned r3 `31502eb7…`** verify --guarded exit 0(SUMS 已记;r2 产物改名 `*.r2-20261019`)。待 Bill 签名装机后填:P0-1 `\n` 分行?P0-2 字号 2/1 每行几汉字?P0-3 替换还是追加?P0-4 3 min 1 s/帧不掉 uncertain?P0-5 停止后「关闭回执 1/0」?P0-6 眼镜按键?P0-7 官方语音助手对会话影响?P0-8 退后台基线
+- [x] Step 1 futures-kb 2026-10-19 完成:`kb/stream.py` + `stream` 子命令 + ALIASES 修复 + CLAUDE.md,已在 futures-kb 本地提交。实测(北京 10:10 日盘):3 品种 15 s 出 67 行,stdin EOF 退出 0;**流在跑时并发 `kb quotes` 正常返回、流不被踢**(免费版两会话并发可行,至少此刻)
+- [x] Step 2 网关 2026-10-19 完成:`watch.py`(SHORT 短名 65 无碰撞、`format_panel` ≤4 品种加时钟行、`Stream/StreamHub`)+ `/v1/watch/names`、`/v1/watch/stream` + `tests/test_watch.py` 6 过;LaunchAgent 已 kickstart。curl 验收:本机与 Tailscale HTTPS 都 1 s 一帧(`10:13:06\n螺纹 3062 -0.58\n铁矿 677.5 -0.73`),5 品种无时钟行,未知名 400,无 Key 401,断开 30 s 后子进程回收,快答路径回归正常。坑:请求行按 latin-1 解码,中文 query 要转回 UTF-8;首帧等真实快照最多 3 s。**WIDTH/COMPACT 常量等 P0-2 实测后定(现 compact=1 去掉 %)**
+- [ ] Step 3 插件完整模式:`NavGlasses.renew()`/autoIdle、`WatchSession` 状态机、`WatchStream` SSE 解析、`WatchController` 完整、`WatchUI` 选品种、`MusicPlayer.background()` 一行、`tests/WatchTest.java`;实机清单见方案
+- [ ] Step 4 语音:`WatchVoice.match` + `TurboAddon.onNlp` 本地命令
+- [ ] Step 5 文档:CLAUDE.md 改动记录、custom/README、TODO、futures-kb CLAUDE.md
+**B/C 段已于 2026-10-20 完成(眼镜在跑 TMIG1,手机 guarded r2 `27010e75…`,全部功能正常)。C5 / 阶段 4 仪表盘卡片(`kb quotes --json` 快照)排在盯盘之后。** 历史:B 段(2026-10-19 Bill 定,方案 ~/.claude/plans/wiggly-zooming-peach.md)把 Android 1.0.6 插件的 OTA 门禁从 1.0.5/TAP1 换成 1.0.6/TMIG1,C 段 Bill 亲手装机、下载、授权、实刷。
 总目标不变:给 Bill 的雷鸟 iO 眼镜接入 Turbo IO(Android 路线、愿意刷机),再做三个自定义功能:期货仪表盘、自有模型、飞书/知识库消息上镜。阶段定义见 CLAUDE.md「阶段与验收」。
 
 ### B 段步骤(2026-10-19)

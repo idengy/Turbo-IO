@@ -8,7 +8,9 @@ cd "$(dirname "$0")/../.."
 source custom/scripts/env.sh >/dev/null
 
 UNSIGNED=android-addon/build/TurboIO-RayNeo-1.0.6-guarded-unsigned.apk
-UNSIGNED_SHA=e2a4b24b9810bd7f69542383bebdb1ba68c80139ca97527d7665901c42071cbe  # r2 2026-10-19,NavReflect.guarded() 修复后;r1 80a485a6… 作废
+AUDIT=android-addon/build/TurboIO-RayNeo-1.0.6-guarded-unsigned.audit.json   # package-official-ota-preparation.py --guarded 的产物审计,含未签名包 SHA
+UNSIGNED_SHA=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['sha256'])" "$AUDIT" 2>/dev/null || true)
+[ -n "$UNSIGNED_SHA" ] || { echo "STOP: 读不到 $AUDIT 里的 sha256,先跑 --guarded 产包"; exit 1; }
 OFFICIAL=local/downloads/official-android-1.0.6-216/RayNeoAI-1.0.6-216-official.apk
 KEYSTORE=local/keys/turboio-bill.p12
 CERT_SHA=4f941f050c77edce03b2d4771b9d56f5dcf59552e98492e25a58fc83240e8478
@@ -24,8 +26,8 @@ if [ -e "$SIGNED" ]; then  # 上一轮签名包不覆盖、不删除,按其 SHA 
   echo "[0/5] 旧签名包已改名为 ${SIGNED%.apk}.prev-$prev.apk"
 fi
 actual=$(shasum -a 256 "$UNSIGNED" | cut -d' ' -f1)
-[ "$actual" = "$UNSIGNED_SHA" ] || { echo "STOP: 未签名包 SHA 不符 $actual"; exit 1; }
-echo "[1/5] 未签名包 SHA 核对 OK"
+[ "$actual" = "$UNSIGNED_SHA" ] || { echo "STOP: 未签名包 SHA 与 audit.json 不符 $actual"; exit 1; }
+echo "[1/5] 未签名包 SHA 核对 OK(${UNSIGNED_SHA:0:8}…,来自 audit.json)"
 
 mkdir -p local/build
 zipalign -p -f 4 "$UNSIGNED" "$ALIGNED"

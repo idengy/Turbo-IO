@@ -16,6 +16,10 @@ import time
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import watch  # noqa: E402  盯盘推流与排版(同目录)
 
 HOST, PORT = "127.0.0.1", int(os.environ.get("GATEWAY_PORT", "8650"))
 HERMES_HOST, HERMES_PORT = "127.0.0.1", int(os.environ.get("HERMES_PORT", "8642"))
@@ -61,6 +65,8 @@ class Quotes:
         for k in self.keys:
             if k in rest:
                 name = self.aliases.get(k, k)
+                if name not in self.names:  # 别名表指向不存在的标准名时按原词算(kb 侧 2026-10-20 已修,这里兜底)
+                    name = k
                 if name in self.names and name not in found:
                     found.append(name)
                 rest = rest.replace(k, " ")
@@ -117,6 +123,7 @@ def is_quote_question(text: str, quotes: "Quotes") -> bool:
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     quotes: Quotes = None  # set in main
+    hub: "watch.StreamHub" = None  # set in main
 
     def log_message(self, fmt, *args):  # 只记路径与状态,不记 body
         log.info("%s %s", self.command, self.path)
@@ -125,7 +132,71 @@ class Handler(BaseHTTPRequestHandler):
         return bool(API_KEY) and self.headers.get("Authorization", "") == f"Bearer {API_KEY}"
 
     def do_GET(self):
+        url = urlsplit(self.path)
+        path = url.path.rstrip("/")
+        if path.endswith("/v1/watch/names") or path.endswith("/v1/watch/stream"):
+            if not self._authorized():
+                return self._json(401, {"error": {"message": "unauthorized"}})
+            if path.endswith("/v1/watch/names"):
+                return self._json(200, {"names": [{"name": n, "short": watch.short(n)} for n in self.quotes.names]})
+            # BaseHTTPRequestHandler 把请求行按 latin-1 解码,原样 UTF-8 的中文要转回;%XX 编码的由 parse_qs 处理
+            query = url.query.encode("latin-1", "ignore").decode("utf-8", "replace")
+            raw = parse_qs(query).get("names", [""])[0]
+            names, unknown = self._resolve([x.strip() for x in raw.split(",") if x.strip()])
+            if unknown or not names:
+                return self._json(400, {"error": {"message": "未识别: " + "、".join(unknown) if unknown else "缺少 names"}})
+            return self._watch(names[:10])
         self._forward(None)
+
+    def _resolve(self, raw: list[str]):
+        names, unknown = [], []
+        for x in raw:
+            n = x if x in self.quotes.names else self.quotes.aliases.get(x, "")
+            if n in self.quotes.names:
+                if n not in names:
+                    names.append(n)
+            else:
+                unknown.append(x)
+        return names, unknown
+
+    def _json(self, status: int, obj: dict):
+        payload = json.dumps(obj, ensure_ascii=False).encode()
+        self.send_response(status); self.send_header("Content-Type", "application/json"); self.send_header("Content-Length", str(len(payload)))
+        self.end_headers(); self.wfile.write(payload)
+
+    def _watch(self, names: list[str]):
+        """SSE:≥1 s 一帧、永远是最新快照;无变化时每 ≤10 s 发 `: hb`;行情源出错发 error 事件后关闭。"""
+        stream = self.hub.acquire(names)
+        log.info("watch start names=%s clients=%d", ",".join(names), stream.clients)
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream"); self.send_header("Cache-Control", "no-cache")
+        self.send_header("Transfer-Encoding", "chunked"); self.end_headers()
+        started = time.time()
+        sent_version, last_frame, last_write = 0, 0.0, started  # 首帧等真实快照,最多等 3 s 再发占位
+        try:
+            while True:
+                with stream.cond:
+                    if stream.version == sent_version and stream.error is None:
+                        stream.cond.wait(timeout=1.0)
+                    version, rows, error = stream.version, dict(stream.latest), stream.error
+                now = time.time()
+                if error is not None:
+                    self._write_chunk(("data: " + json.dumps({"type": "error", "message": error}, ensure_ascii=False) + "\n\n").encode())
+                    break
+                if (version != sent_version or (sent_version == 0 and now - started >= 3.0)) and now - last_frame >= watch.FRAME_INTERVAL:
+                    asof = watch.asof_of(rows)
+                    event = {"type": "quote", "text": watch.format_panel(rows, names, asof), "asof": asof,
+                             "rows": [{"name": n, "last": rows.get(n, {}).get("last"), "chg_pct": rows.get(n, {}).get("chg_pct")} for n in names]}
+                    self._write_chunk(("data: " + json.dumps(event, ensure_ascii=False) + "\n\n").encode())
+                    sent_version, last_frame, last_write = max(version, 1), now, now
+                elif now - last_write >= watch.HEARTBEAT:
+                    self._write_chunk(b": hb\n\n"); last_write = now
+            self.wfile.write(b"0\r\n\r\n"); self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, TimeoutError):
+            log.info("watch client went away")
+        finally:
+            self.hub.release(stream)
+            log.info("watch end names=%s", ",".join(names))
 
     def do_POST(self):
         length = int(self.headers.get("Content-Length") or 0)
@@ -211,6 +282,7 @@ def main():
     if not API_KEY:
         log.warning("API_SERVER_KEY not found in ~/.hermes/.env; quote fast-path disabled, everything forwards")
     Handler.quotes = Quotes()
+    Handler.hub = watch.StreamHub([str(KB_PY), "-m", "kb", "stream"], KB_ROOT, log)
     log.info("variety names loaded: %d (+%d aliases)", len(Handler.quotes.names), len(Handler.quotes.aliases))
     srv = ThreadingHTTPServer((HOST, PORT), Handler)
     srv.daemon_threads = True

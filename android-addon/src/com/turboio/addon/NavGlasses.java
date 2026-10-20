@@ -10,11 +10,13 @@ public final class NavGlasses {
     private static volatile String device="",sid="",phase="idle";
     private static String note="眼镜显示未开启",latest="",sent="";
     private static int textSubmitted,textCompleted;private static boolean navigationSession;private static long lifetime=240000,interval=3000;
+    // bill 分支(盯盘 P0):字号可调 + type3 关闭帧的 SDK 回执计数(续期设计依赖「关闭已送达」这个信号)。
+    static int captionFont=2;private static int closeCompleted,closeFailed;
     private static long deadline,started,lastSend;private static boolean pending;
     private static Runnable changed;
     public static void listen(Runnable r){changed=r;}
     private static void mark(String p,String n){phase=p;note=n;if(changed!=null)changed.run();}
-    public static String status(){return note+" · "+phase+" · 文字提交 "+textSubmitted+" / SDK完成 "+textCompleted+" · "+(navigationSession?"路线":"测试");}
+    public static String status(){return note+" · "+phase+" · 文字提交 "+textSubmitted+" / SDK完成 "+textCompleted+" · 关闭回执 "+closeCompleted+"/"+closeFailed+" · "+(navigationSession?"路线":"测试");}
     public static String phase(){return phase;}
     public static boolean active(){return !phase.equals("idle");}
     private static Object manager()throws Exception{return NavReflect.field(NavReflect.type("E3.u"),"h");}
@@ -34,7 +36,7 @@ public final class NavGlasses {
         if(action!=NavSessionPolicy.Action.START){mark(phase,"上一会话未结束，请在开始按钮处处理退出确认");return false;}
         try{device=connected();if(device.isEmpty())throw new IllegalStateException();sid=UUID.randomUUID().toString().replace("-","");latest=NavCore.clip(text,384);sent="";lastSend=0;pending=false;started=SystemClock.elapsedRealtime();deadline=started+10000;
             textSubmitted=0;textCompleted=0;navigationSession=navigation;
-            JSONObject config=new JSONObject().put("font_size",2).put("content_width",100).put("max_lines",5).put("position","center").put("is_display",true).put("straight_view","original");
+            JSONObject config=new JSONObject().put("font_size",captionFont).put("content_width",100).put("max_lines",5).put("position","center").put("is_display",true).put("straight_view","original");
             mark("starting","正在开启纯显示通道，等待眼镜回执");
             send(7,new JSONObject().put("sid",sid).put("force",false).put("scope","temporary").put("config",config));MAIN.removeCallbacks(tick);MAIN.postDelayed(tick,1000);return true;
         }catch(Exception e){mark("uncertain","无法开启；请确认连接和镜片状态");return false;}
@@ -51,7 +53,9 @@ public final class NavGlasses {
         Object message=NavReflect.make("E3.Q",NavCore.packet(type,json.toString()),UUID.randomUUID().toString(),device,business,null,priority,false,false,null,null);
         String owner=sid;
         Object callback=NavReflect.proxy("kotlin.jvm.functions.Function2",(name,args)->MAIN.post(()->{
-            if(!sid.equals(owner))return;if(type==5){pending=false;if(args.length>1&&args[1]==null){textCompleted++;mark(phase,"导航/测试文字已完成 SDK 发送，镜片效果以实际为准");}}
+            if(!sid.equals(owner))return;boolean ok=args.length>1&&args[1]==null;
+            if(type==5){pending=false;if(ok){textCompleted++;mark(phase,"导航/测试文字已完成 SDK 发送，镜片效果以实际为准");}}
+            if(type==3){if(ok)closeCompleted++;else if(args.length>1)closeFailed++;}
             if(args.length>1&&args[1]!=null){if(type==3)mark("uncertain","SDK拒绝退出，请用眼镜按钮关闭");else stop();}
         }));NavReflect.call(manager(),"u",message,callback);
     }

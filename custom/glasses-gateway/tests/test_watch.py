@@ -59,6 +59,32 @@ class FormatTest(unittest.TestCase):
         self.assertTrue(five.startswith("螺纹 "))
         self.assertEqual(watch.format_panel(rows, ["铜"], "").split("\n"), ["铜 104 +0.40%"])  # 无 asof 不加时钟
 
+    def test_pages_and_rotation(self):
+        names = [f"n{i}" for i in range(12)]
+        self.assertEqual(watch.MAX_NAMES, 12)
+        self.assertEqual([len(p) for p in watch.pages(names, 5)], [5, 5, 2])
+        self.assertEqual(watch.pages([], 5), [[]])
+        self.assertEqual([watch.page_of(t, 5.0, 3) for t in (0, 4.9, 5, 10, 15, 29.9)], [0, 0, 1, 2, 0, 2])
+        self.assertEqual(watch.page_of(100, 5.0, 1), 0)
+        self.assertEqual(watch.clamp_page_seconds("abc"), watch.PAGE_SECONDS)
+        self.assertEqual((watch.clamp_page_seconds("0.5"), watch.clamp_page_seconds("999")), watch.PAGE_SECONDS_RANGE)
+
+    def test_format_page_marker_and_single_page_fallback(self):
+        rows = {n: {"last": 100 + i, "chg_pct": 0.1 * i, "time": "2026-10-20 10:13:06"} for i, n in enumerate(["螺纹钢", "铁矿石", "焦煤", "豆粕", "铜", "黄金", "白银"])}
+        names = list(rows)
+        p1 = watch.format_page(rows, names, 0, 5).split("\n")
+        p2 = watch.format_page(rows, names, 1, 5).split("\n")
+        self.assertEqual(len(p1), 5); self.assertEqual(len(p2), 2)
+        self.assertTrue(p1[0].endswith("  1/2") and p2[0].endswith("  2/2"), (p1[0], p2[0]))
+        self.assertTrue(p2[0].startswith("黄金") and p2[1].startswith("白银"))
+        self.assertEqual(watch.format_page(rows, names, 9, 5), watch.format_page(rows, names, 1, 5))  # 越界钉到末页
+        # 一页装得下 → 与 format_panel 一致(含 ≤4 品种时钟行)
+        four = names[:4]
+        self.assertEqual(watch.format_page(rows, four, 0, 5, asof=watch.asof_of(rows)), watch.format_panel(rows, four, watch.asof_of(rows)))
+        # 12 行最长的一帧仍在插件 384 字节 clip 之内
+        worst = {f"低硫燃料油27{i:02d}": {"last": 12345.5, "chg_pct": -10.25} for i in range(12)}
+        self.assertLess(len(watch.format_panel(worst, list(worst), "").encode()), 384)
+
     def test_order_follows_request(self):
         rows = {"铜": {"last": 1.0, "chg_pct": 0.0}, "螺纹钢": {"last": 2.0, "chg_pct": 0.0}}
         self.assertEqual(watch.format_panel(rows, ["铜", "螺纹钢"], "", clock=False).split("\n")[0][:1], "铜")
@@ -86,7 +112,8 @@ class StreamTest(unittest.TestCase):
         self.assertEqual(s.clients, 2)
         hub.release(s); hub.release(s)
         deadline = time.time() + 5
-        while not s.closed and time.time() < deadline:
+        # close() 先置 closed 唤醒等待者、再等子进程退出:两件事都要等到,否则偶发 poll() 还是 None(2026-10-20 修)
+        while (not s.closed or s.proc.poll() is None) and time.time() < deadline:
             time.sleep(0.1)
         self.assertTrue(s.closed)
         self.assertIsNotNone(s.proc.poll())

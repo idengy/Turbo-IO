@@ -12,6 +12,8 @@ public final class NavGlasses {
     private static int textSubmitted,textCompleted;private static boolean navigationSession;private static long lifetime=240000,interval=3000;
     // bill 分支(盯盘 P0):字号可调 + type3 关闭帧的 SDK 回执计数(续期设计依赖「关闭已送达」这个信号)。
     static int captionFont=2;private static int closeCompleted,closeFailed;
+    // r10(2026-10-20):type7 config 的 max_lines 开放可调(5/8/10),看固件是否直接多显示几行;官方与上游都钉 5。
+    static int captionLines=5;
     // 盯盘续期:renew() 置 autoIdle 后发 type3;SDK 确认关闭帧送达即自动回 idle(不等用户确认),失败仍走 uncertain。其他调用方语义不变。
     private static boolean autoIdle;
     // 盯盘停止顺序(2026-10-20 实机:停止后行情文字留在镜片上):type5 文字帧在途时不立刻发 type3,先等它的 SDK 回执,
@@ -44,7 +46,7 @@ public final class NavGlasses {
         if(action!=NavSessionPolicy.Action.START){mark(phase,"上一会话未结束，请在开始按钮处处理退出确认");return false;}
         try{device=connected();if(device.isEmpty())throw new IllegalStateException();sid=UUID.randomUUID().toString().replace("-","");latest=NavCore.clip(text,384);sent="";lastSend=0;pending=false;closeStep=0;MAIN.removeCallbacks(closer);started=SystemClock.elapsedRealtime();deadline=started+10000;
             textSubmitted=0;textCompleted=0;navigationSession=navigation;
-            JSONObject config=new JSONObject().put("font_size",captionFont).put("content_width",100).put("max_lines",5).put("position","center").put("is_display",true).put("straight_view","original");
+            JSONObject config=new JSONObject().put("font_size",captionFont).put("content_width",100).put("max_lines",captionLines).put("position","center").put("is_display",true).put("straight_view","original");
             mark("starting","正在开启纯显示通道，等待眼镜回执");
             send(7,new JSONObject().put("sid",sid).put("force",false).put("scope","temporary").put("config",config));MAIN.removeCallbacks(tick);MAIN.postDelayed(tick,1000);return true;
         }catch(Exception e){mark("uncertain","无法开启；请确认连接和镜片状态");return false;}

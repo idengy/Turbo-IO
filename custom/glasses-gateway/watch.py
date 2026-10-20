@@ -2,6 +2,8 @@
 纯标准库、无导入副作用(可单测)。被 gateway.py 的 /v1/watch/* 路由使用。
 - format_panel:每行「短名 价格 涨跌」;≤4 个品种时首行加 HH:MM:SS(5 个品种时不占位;非交易时段价格不动,
   没有时钟就看不出流是否活着);缺行打「短名 -- --」。WIDTH/COMPACT 由 P0 实机探针定。
+- 超过一屏(2026-10-20 r10,上限 MAX_NAMES=12):mode=scroll 一帧发全部行,翻页靠眼镜滚轮(固件 aisubtitle
+  ScrollTextWidget 的历史翻看);mode=rotate 由网关每 page_seconds 换一页(format_page,首行末尾标「1/3」)。
 - Stream:一个 `kb stream 品种…` 子进程;读线程把 JSON 行并进 latest,version+1 并唤醒等待者;最后一个客户端
   走后 30 s 回收(StreamHub);exit 1 退避 2/4/8…≤30 s 重启,exit 2 置 error 唤醒客户端。"""
 from __future__ import annotations
@@ -27,6 +29,10 @@ SHORT = {
 WIDTH = 37      # 字号 2 每行可用的半角列数:2026-10-20 实测「5」+18 个汉字(37 列)整行显示;「铁矿2701 678.0 -0.66%」21 列
 COMPACT = 0     # 0: 「螺纹 3215 +0.62%」 1: 去掉 %  2: 再去掉短名后的空格。实测宽度够,保留 %
 CLOCK_MAX_NAMES = 4
+MAX_NAMES = 12          # 12 行最长约 300 字节,低于插件 NavGlasses 的 384 字节 clip;futures-kb kb stream MAX_SYMBOLS 同步为 12
+PAGE_SIZE = 5           # 轮播每页行数 = 眼镜每屏行数(type7 max_lines,默认 5;插件可传 page_size)
+PAGE_SECONDS = 5.0      # 轮播默认每页停留秒数
+PAGE_SECONDS_RANGE = (2.0, 60.0)
 FRAME_INTERVAL = 1.0
 HEARTBEAT = 10.0
 
@@ -74,6 +80,39 @@ def format_panel(rows: dict, names: list[str], asof: str = "", compact: int = CO
         lines.append(asof[-8:])
     for n in names:
         lines.append(line(n, rows.get(n), compact))
+    return "\n".join(lines)
+
+
+def pages(names: list[str], size: int = PAGE_SIZE) -> list[list[str]]:
+    size = max(1, int(size or PAGE_SIZE))
+    return [names[i:i + size] for i in range(0, len(names), size)] or [[]]
+
+
+def page_of(elapsed: float, page_seconds: float, total: int) -> int:
+    """轮播:开流后第 elapsed 秒该显示第几页(0 起)。"""
+    if total <= 1 or page_seconds <= 0:
+        return 0
+    return int(elapsed // page_seconds) % total
+
+
+def clamp_page_seconds(v) -> float:
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return PAGE_SECONDS
+    lo, hi = PAGE_SECONDS_RANGE
+    return min(hi, max(lo, f))
+
+
+def format_page(rows: dict, names: list[str], page: int, size: int = PAGE_SIZE, compact: int = COMPACT, asof: str = "") -> str:
+    """轮播模式的一帧:第 page 页的行;多于一页时首行末尾加「 p/n」;只有一页时等同 format_panel(含 ≤4 品种时钟行)。"""
+    ps = pages(names, size)
+    total = len(ps)
+    if total <= 1:
+        return format_panel(rows, names, asof, compact)
+    page = max(0, min(page, total - 1))
+    lines = [line(n, rows.get(n), compact) for n in ps[page]]
+    lines[0] = f"{lines[0]}  {page + 1}/{total}"
     return "\n".join(lines)
 
 

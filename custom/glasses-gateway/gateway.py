@@ -128,7 +128,7 @@ class Handler(BaseHTTPRequestHandler):
     hub: "watch.StreamHub" = None  # set in main
 
     def log_message(self, fmt, *args):  # 只记路径与状态,不记 body
-        log.info("%s %s", self.command, self.path)
+        log.info("%s %s", getattr(self, "command", "-"), getattr(self, "path", "-"))  # 请求行解析失败(如 URL 里裸 UTF-8)时还没有 path
 
     def _authorized(self) -> bool:
         return bool(API_KEY) and self.headers.get("Authorization", "") == f"Bearer {API_KEY}"
@@ -160,10 +160,20 @@ class Handler(BaseHTTPRequestHandler):
                 h = hit[0]
                 return self._json(200, {"label": h["label"], "display": watch.short(h["label"]), "symbol": h["symbol"], "name": h["name"], "yymm": h["yymm"]})
             raw = query.get("names", [""])[0]
-            hit, unknown = self._contracts([x.strip() for x in raw.split(",") if x.strip()][:10])
+            tokens = [x.strip() for x in raw.split(",") if x.strip()]
+            if len(tokens) > watch.MAX_NAMES:
+                return self._json(400, {"error": {"message": f"最多 {watch.MAX_NAMES} 个合约"}})
+            hit, unknown = self._contracts(tokens)
             if unknown or not hit:
                 return self._json(400, {"error": {"message": "未识别: " + "、".join(unknown) if unknown else "缺少 names"}})
-            return self._watch([h["label"] for h in hit])
+            # r10:mode=scroll(默认,一帧全部行,眼镜滚轮翻)/ rotate(网关每 page_seconds 换一页,每页 page_size 行)
+            mode = "rotate" if query.get("mode", [""])[0] == "rotate" else "scroll"
+            page_seconds = watch.clamp_page_seconds(query.get("page_seconds", [""])[0])
+            try:
+                page_size = max(1, min(watch.MAX_NAMES, int(query.get("page_size", [""])[0])))
+            except ValueError:
+                page_size = watch.PAGE_SIZE
+            return self._watch([h["label"] for h in hit], mode, page_seconds, page_size)
         self._forward(None)
 
     def _contracts(self, tokens: list[str]):
@@ -182,15 +192,18 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status); self.send_header("Content-Type", "application/json"); self.send_header("Content-Length", str(len(payload)))
         self.end_headers(); self.wfile.write(payload)
 
-    def _watch(self, names: list[str]):
-        """SSE:≥1 s 一帧、永远是最新快照;无变化时每 ≤10 s 发 `: hb`;行情源出错发 error 事件后关闭。"""
+    def _watch(self, names: list[str], mode: str = "scroll", page_seconds: float = watch.PAGE_SECONDS, page_size: int = watch.PAGE_SIZE):
+        """SSE:≥1 s 一帧、永远是最新快照;无变化时每 ≤10 s 发 `: hb`;行情源出错发 error 事件后关闭。
+        rotate 模式下翻页本身也算变化:到点换页即使行情没动也发一帧。"""
         stream = self.hub.acquire(names)
-        log.info("watch start names=%s clients=%d", ",".join(names), stream.clients)
+        total_pages = len(watch.pages(names, page_size))
+        log.info("watch start names=%s clients=%d mode=%s pages=%d/%ss", ",".join(names), stream.clients, mode, total_pages, page_seconds)
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream"); self.send_header("Cache-Control", "no-cache")
         self.send_header("Transfer-Encoding", "chunked"); self.end_headers()
         started = time.time()
         sent_version, last_frame, last_write = 0, 0.0, started  # 首帧等真实快照,最多等 3 s 再发占位
+        sent_page = -1
         try:
             while True:
                 with stream.cond:
@@ -201,18 +214,22 @@ class Handler(BaseHTTPRequestHandler):
                 if error is not None:
                     self._write_chunk(("data: " + json.dumps({"type": "error", "message": error}, ensure_ascii=False) + "\n\n").encode())
                     break
-                if (version != sent_version or (sent_version == 0 and now - started >= 3.0)) and now - last_frame >= watch.FRAME_INTERVAL:
+                page = watch.page_of(now - started, page_seconds, total_pages) if mode == "rotate" else 0
+                changed = version != sent_version or page != sent_page or (sent_version == 0 and now - started >= 3.0)
+                if changed and now - last_frame >= watch.FRAME_INTERVAL:
                     asof = watch.asof_of(rows)
-                    event = {"type": "quote", "text": watch.format_panel(rows, names, asof), "asof": asof,
+                    text = watch.format_page(rows, names, page, page_size, asof=asof) if mode == "rotate" else watch.format_panel(rows, names, asof)
+                    event = {"type": "quote", "text": text, "asof": asof, "page": page + 1, "pages": total_pages,
                              "rows": [{"name": n, "last": rows.get(n, {}).get("last"), "chg_pct": rows.get(n, {}).get("chg_pct")} for n in names]}
                     self._write_chunk(("data: " + json.dumps(event, ensure_ascii=False) + "\n\n").encode())
-                    sent_version, last_frame, last_write = max(version, 1), now, now
+                    sent_version, sent_page, last_frame, last_write = max(version, 1), page, now, now
                 elif now - last_write >= watch.HEARTBEAT:
                     self._write_chunk(b": hb\n\n"); last_write = now
             self.wfile.write(b"0\r\n\r\n"); self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError, TimeoutError):
             log.info("watch client went away")
         finally:
+            self.close_connection = True  # 同 _words:流结束就关,不再 keep-alive 读下一请求(客户端已走,只会刷 reset 栈)
             self.hub.release(stream)
             log.info("watch end names=%s", ",".join(names))
 

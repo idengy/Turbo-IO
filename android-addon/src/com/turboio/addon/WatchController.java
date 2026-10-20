@@ -11,13 +11,14 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 /** 期货盯盘(bill 分支):订阅 Mac 网关的 SSE 行情文字流,每帧 `NavGlasses.offer(text)` 推到眼镜业务 19 文字面板。
- *  排版在网关(≤4 品种首行时钟、每行「短名 价格 涨跌」),这里只做:品种选择(≤5)、SSE 订阅与退避重连、
+ *  排版在网关(≤4 品种首行时钟、每行「短名 价格 涨跌」),这里只做:品种选择(≤12,r10 前 ≤5)、SSE 订阅与退避重连、
+ *  超过一屏的显示方式(r10:scroll = 一帧全部行、眼镜滚轮翻;rotate = 网关每 N 秒换一页)只是流地址上的参数、
  *  55 分钟续期(WatchSession 状态机 + NavGlasses.renew())、BackgroundWork 租约、语音启停。全部在主线程调用。
  *  流地址 = 模型端点(…/v1/chat/completions)的 origin + /v1/watch/stream,Key 复用 SecretStore 的 model_key。
  *  另保留 P0 探针(合成行情 / 宽度 / 替换-追加),用于固件或宿主升级后复测面板行为。 */
 public final class WatchController {
     private static final Handler MAIN=new Handler(Looper.getMainLooper());
-    static final int MAX_NAMES=5;
+    static final int MAX_NAMES=12; // r10:12 行最长约 300 字节 < NavGlasses 384 字节 clip;网关 watch.MAX_NAMES、kb stream MAX_SYMBOLS 同为 12
     private static Context app;private static SharedPreferences prefs;
     // 完整模式
     private static long epoch;private static boolean running,renewing;private static long sessionStart,closeAt,lastData;private static int attempt;
@@ -35,6 +36,11 @@ public final class WatchController {
     static int wordsSeconds(){return prefs.getInt("words_seconds",6);}
     static void wordsSeconds(int s){prefs.edit().putInt("words_seconds",s).apply();}
     static boolean wordsShuffle(){return prefs.getBoolean("words_shuffle",false);}
+    // ---- 超过一屏的显示方式(r10):rotate=true 轮播,否则滚轮;轮播每页秒数 2–60 ----
+    static boolean rotate(){return prefs.getBoolean("rotate",false);}
+    static void rotate(boolean on){prefs.edit().putBoolean("rotate",on).apply();}
+    static int pageSeconds(){return prefs.getInt("page_seconds",5);}
+    static void pageSeconds(int s){prefs.edit().putInt("page_seconds",Math.max(2,Math.min(60,s))).apply();}
     static void wordsShuffle(boolean on){prefs.edit().putBoolean("words_shuffle",on).apply();}
 
     // ---- 品种 ----
@@ -92,7 +98,7 @@ public final class WatchController {
     private static String precheck(boolean words){
         if(running)return task+"已在进行";
         if(!mode.isEmpty())return "探针进行中，请先停止";
-        if(!words&&names().isEmpty())return "请先在手机勾选品种（最多 5 个）";
+        if(!words&&names().isEmpty())return "请先在手机添加合约（最多 "+MAX_NAMES+" 个）";
         if(NavGlasses.active())return "上一显示会话未结束（"+NavGlasses.phase()+"），请先确认眼镜已回首页";
         try{origin();}catch(Exception e){return "请先在「模型与对话」配置自有模型地址（https，以 /chat/completions 结尾）";}
         try{if(SecretStore.get(app).isEmpty())return "模型 Key 为空，请先在「模型与对话」配置";}catch(Exception e){return "读取模型 Key 失败";}
@@ -102,7 +108,7 @@ public final class WatchController {
     static String start(){
         if(running)return restart();
         String why=precheck(false);if(why!=null)return why;
-        final String key;try{StringBuilder q=new StringBuilder();for(String n:names()){if(q.length()>0)q.append(',');q.append(n);}streamUrl=origin()+"/v1/watch/stream?names="+URLEncoder.encode(q.toString(),"UTF-8");key=SecretStore.get(app);}catch(Exception e){return "拼接流地址失败";}
+        final String key;try{StringBuilder q=new StringBuilder();for(String n:names()){if(q.length()>0)q.append(',');q.append(n);}streamUrl=origin()+"/v1/watch/stream?names="+URLEncoder.encode(q.toString(),"UTF-8")+"&mode="+(rotate()?"rotate":"scroll")+"&page_seconds="+pageSeconds()+"&page_size="+NavGlasses.captionLines;key=SecretStore.get(app);}catch(Exception e){return "拼接流地址失败";}
         return begin("盯盘",key,"盯盘连接中…","已开始，等待行情流");
     }
     /** 开始背单词:网关 /v1/words/stream 每 seconds 秒一帧(单词 / 音标 / 释义已排好版);返回 null = 已开始。 */
@@ -197,6 +203,7 @@ public final class WatchController {
     static String startProbe(String kind){
         if(kind.equals("width"))return begin("宽度探针",widthFrame());
         if(kind.equals("append"))return begin("替换探针","A 第一帧 请记住这行\n(4 秒后换 B 帧)");
+        if(kind.equals("lines"))return begin("多行探针",linesFrame(0));
         return "未知探针";
     }
     private static String begin(String m,String first){
@@ -212,10 +219,13 @@ public final class WatchController {
     private static void step(){
         if(mode.equals("合成行情")){if(seconds>=180){stop("3 分钟测试结束，已请求关闭显示");return;}NavGlasses.offer(frame());offers++;}
         else if(mode.equals("替换探针")){if(seconds==4){NavGlasses.offer("B 第二帧 若仍能看到 A 行\n说明面板是追加");offers++;}else if(seconds>=60){stop("替换探针结束，已请求关闭显示");return;}}
+        else if(mode.equals("多行探针")){if(seconds>=180){stop("多行探针结束，已请求关闭显示");return;}if(seconds%5==0){NavGlasses.offer(linesFrame(seconds/5));offers++;}}
         else if(seconds>=120){stop("宽度探针结束，已请求关闭显示");return;}
         String p=NavGlasses.phase();if(p.equals("uncertain")||p.equals("idle"))stop("眼镜会话已结束（"+p+"），探针停止");
     }
     private static String frame(){StringBuilder b=new StringBuilder();for(int i=0;i<5;i++){price[i]+=STEP[i]*(random.nextInt(5)-2);if(i>0)b.append('\n');b.append(String.format(Locale.ROOT,"%s %s %+.2f%%",NAMES[i],priceText(price[i]),(price[i]/BASE[i]-1)*100));}return b.toString();}
     static String priceText(double v){if(v>=100&&v==Math.rint(v))return String.valueOf((long)v);if(v>=100)return String.format(Locale.ROOT,"%.1f",v);return String.format(Locale.ROOT,"%.2f",v);}
+    /** r10 多行探针:12 行编号,每 5 s 换一次「更新 #n」。看:默认显示头几行还是尾几行、滚轮能否翻到其余行、更新后滚动位置是否被拉回。 */
+    private static String linesFrame(int n){StringBuilder b=new StringBuilder();for(int i=1;i<=12;i++){if(i>1)b.append('\n');b.append(String.format(Locale.ROOT,"%02d 第%d行 更新#%d",i,i,n));}return b.toString();}
     private static String widthFrame(){String cjk="一二三四五六七八九十甲乙丙丁戊己庚辛壬癸";StringBuilder b=new StringBuilder();int[] lens={10,12,14,16,18};for(int i=0;i<5;i++){if(i>0)b.append('\n');b.append(i+1).append(cjk,0,lens[i]);}return b.toString();}
 }

@@ -26,7 +26,7 @@ final class ReaderLibrary {
  static void importText(byte[] data,ReaderCodec.Book book)throws Exception{if(loading||webBusy||ReaderBridge.active())throw new IOException("请先结束阅读");String s=ReaderCodec.utf8(data);String title="导入的本机书籍",author="本机 TXT";
   // bill 分支 r15(2026-10-20):Markdown 文章转纯文本再入书架(去标记、表格拍平、代码块保留),第一个标题当书名
   if(MarkdownText.looksLikeMarkdown(s)){MarkdownText.Result r=MarkdownText.convert(s);s=r.text;title=r.title;author="本机 Markdown";data=s.getBytes(StandardCharsets.UTF_8);}
-  ReaderCodec.wrap(s);ReaderCodec.Book b=book;if(b==null){if(books.size()>=1000)throw new IOException("书架已满");b=new ReaderCodec.Book("local-"+UUID.randomUUID(),title,author,books.size()+1);books.add(b);}atomic(contentFile(b),data);save();note="正文已保存，可选中发送";}
+  ReaderCodec.wrap(s);ReaderCodec.Book b=book;if(b==null){if(books.size()>=1000)throw new IOException("书架已满");b=new ReaderCodec.Book("local-"+UUID.randomUUID(),title,author,books.size()+1);books.add(b);first=(books.size()-1)/4*4;/* r16:列表翻到新书所在页,与 loadDemo 一致 */}atomic(contentFile(b),data);save();note="正文已保存，可选中发送";}
  private static File contentFile(ReaderCodec.Book b){return new File(app.getFilesDir(),"reader-"+UUID.nameUUIDFromBytes(b.id.getBytes(StandardCharsets.UTF_8))+".txt");}
  static void read(ReaderCodec.Book b,int row){
   if(loading)return;

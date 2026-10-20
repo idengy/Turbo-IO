@@ -92,12 +92,27 @@ public final class WatchController {
     }
     /** 开始盯盘;返回 null = 已开始,否则原因。 */
     static String start(){
+        if(running)return restart();
         String why=precheck();if(why!=null)return why;
         final String key;try{StringBuilder q=new StringBuilder();for(String n:names()){if(q.length()>0)q.append(',');q.append(n);}streamUrl=origin()+"/v1/watch/stream?names="+URLEncoder.encode(q.toString(),"UTF-8");key=SecretStore.get(app);}catch(Exception e){return "拼接流地址失败";}
         if(!NavGlasses.startCaption("盯盘连接中…"))return "无法开启眼镜显示："+NavGlasses.status();
         leased=BackgroundWork.acquire("盯盘",16);
         epoch++;running=true;renewing=false;attempt=0;lastData=0;lastText="";sessionStart=SystemClock.elapsedRealtime();note="已开始，等待行情流";
         final long e=epoch;spawn(e,key);MAIN.removeCallbacks(tick);MAIN.postDelayed(tick,1000);
+        return null;
+    }
+    /** 运行中再次「开始」= 重开:眼镜长按退出不会通知手机,用这一步把面板拉回来。先干净关闭旧会话,回 idle 后立即开新会话(最多等 6 s)。 */
+    static String restart(){
+        if(!running)return start();
+        final List<String> keep=names();
+        stop("重开中…");
+        final long began=SystemClock.elapsedRealtime();
+        MAIN.postDelayed(new Runnable(){public void run(){
+            String p=NavGlasses.phase();
+            if(p.equals("idle")){String r=start();note=r==null?"已重开":"重开失败："+r;return;}
+            if(SystemClock.elapsedRealtime()-began>6000||p.equals("uncertain")){note="重开失败：眼镜会话未干净关闭（"+p+"），请点「确认眼镜已回首页」后再开始";return;}
+            MAIN.postDelayed(this,300);
+        }},300);
         return null;
     }
     static void stop(String reason){
@@ -110,6 +125,7 @@ public final class WatchController {
     }
     /** 语音「开始盯盘」:先校验,再延迟 1.5 s 真正开始(让官方回答区先关闭);返回给眼镜说的话。 */
     static String voiceStart(){
+        if(running){MAIN.postDelayed(()->restart(),1500);return "盯盘重新投到眼镜";}
         String why=precheck();if(why!=null)return why;
         MAIN.postDelayed(()->{String r=start();if(r!=null)note="语音开始失败："+r;},1500);
         return "盯盘已开始，手机可切换品种";

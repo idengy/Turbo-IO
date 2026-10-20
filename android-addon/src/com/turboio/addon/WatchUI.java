@@ -3,9 +3,9 @@ import android.app.*;import android.os.*;import android.widget.*;import java.uti
 /** 期货盯盘页(bill 分支):勾选品种(≤5)、开始/停止、确认眼镜已回首页、诊断探针。关页不停盯盘(后台继续要在设置里开「后台运行」)。 */
 final class WatchUI {
  static void show(Activity a){EditorialUI.Screen s=new EditorialUI.Screen(a,"期货盯盘");LinearLayout b=s.body;
-  b.addView(EditorialUI.text(a,"眼镜文字面板显示所选品种的最新价与涨跌幅，约 1 秒一帧；面板会占满眼镜画面，期间音乐/阅读/导航不可用。会话每 55 分钟自动续开。退后台继续需在设置里开「后台运行」。",14,EditorialUI.MUTED));
+  b.addView(EditorialUI.text(a,"眼镜文字面板显示所选合约的最新价与涨跌幅，约 1 秒一帧；面板会占满眼镜画面，期间音乐/阅读/导航不可用。会话每 55 分钟自动续开。眼镜上长按实体键会退出面板但手机不会知道，再点一次「开始盯盘」或对眼镜说「开始盯盘」即可重新投上去。退后台继续需在设置里开「后台运行」。",14,EditorialUI.MUTED));
   TextView state=EditorialUI.text(a,"",14,EditorialUI.LIME);b.addView(state);
-  EditorialUI.button(a,b,"开始盯盘",true,()->run(a,WatchController.start()));
+  EditorialUI.button(a,b,"开始盯盘 / 重新投到眼镜",true,()->run(a,WatchController.start()));
   EditorialUI.button(a,b,"停止盯盘",false,()->WatchController.stop("用户停止"));
   EditorialUI.button(a,b,"确认眼镜已回首页（解除会话占用）",false,()->EditorialUI.confirm(a,"眼镜已退出文字面板？","只有镜片确实回到首页才点确认；否则下一次开始可能叠加会话。",NavGlasses::confirmIdle));
   // 品种:搜索框添加(品种 / 品种+月份),列表可移除,最多 5 个

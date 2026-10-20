@@ -3,10 +3,10 @@
 <plist version="1.0">
 <dict>
   <key>Label</key><string>com.dyb.turboio-gateway</string>
+  <!-- python 固定 Homebrew 3.11:LaunchAgent 的 PATH 里没有 ~/.local/bin,`env python3` 会落到 /usr/bin 的 3.9(2026-10-19 踩过,bytes | None 语法报错) -->
   <key>ProgramArguments</key>
   <array>
-    <string>/usr/bin/env</string>
-    <string>python3</string>
+    <string>/opt/homebrew/opt/python@3.11/bin/python3.11</string>
     <string>/Users/dyb/PROJECT/Turbo-IO/custom/glasses-gateway/gateway.py</string>
   </array>
   <key>EnvironmentVariables</key>

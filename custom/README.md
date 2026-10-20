@@ -10,5 +10,5 @@ Bill 自己的功能代码与文档。子目录约定见根 CLAUDE.md「目录�
 ## glasses-gateway（2026-10-19）
 
 眼镜问答网关。`python3 custom/glasses-gateway/gateway.py` 监听 127.0.0.1:8650；行情问题直答（天勤数据经 futures-kb `kb quotes --json`，20 秒缓存），其余转发 Hermes 8642。
-验收：`curl -N http://127.0.0.1:8650/v1/chat/completions`（带 Hermes 的 Bearer）问「自选行情」首个 data 在 1 秒内；问「你是谁」走 Hermes 原样流式。常驻用 `com.dyb.turboio-gateway.plist`。
+验收：`curl -N http://127.0.0.1:8650/v1/chat/completions`（带 Hermes 的 Bearer）问「自选行情」首个 data 在 1 秒内；问「你是谁」走 Hermes 原样流式。常驻用 `com.dyb.turboio-gateway.plist`(2026-10-19 已装到 `~/Library/LaunchAgents`,python 固定 Homebrew 3.11 绝对路径;改模板后 `cp` 过去再 `launchctl bootout gui/$(id -u)/com.dyb.turboio-gateway && launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.dyb.turboio-gateway.plist`)。
 

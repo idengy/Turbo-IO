@@ -2,6 +2,8 @@
 """眼镜问答网关(2026-10-19):挡在 Hermes API server 前面。
 行情类问题不经 LLM,直接用 futures-kb 的天勤数据以 SSE 流式回答(首字 <1 s);其余请求原样转发 Hermes。
 原因:Hermes 调工具时第一个可见字要 11 s,眼镜回答区早已关闭。纯标准库,密钥只在内存。"""
+from __future__ import annotations  # 让 3.9 也能导入(类型标注里的 X | None)
+
 import http.client
 import json
 import logging

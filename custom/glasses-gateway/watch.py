@@ -3,7 +3,7 @@
 - format_panel:每行「短名 价格 涨跌」;≤4 个品种时首行加 HH:MM:SS(5 个品种时不占位;非交易时段价格不动,
   没有时钟就看不出流是否活着);缺行打「短名 -- --」。WIDTH/COMPACT 由 P0 实机探针定。
 - 超过一屏(2026-10-20 r10,上限 MAX_NAMES=12):mode=scroll 一帧发全部行,翻页靠眼镜滚轮(固件 aisubtitle
-  ScrollTextWidget 的历史翻看);mode=rotate 由网关每 page_seconds 换一页(format_page,首行末尾标「1/3」)。
+  ScrollTextWidget 的历史翻看,实测每次更新跳回最后一页,只能停 3 s);mode=rotate 由网关每 page_seconds 换一页(format_page,首行末尾标「1/3」),r12 起插件默认 rotate。
 - Stream:一个 `kb stream 品种…` 子进程;读线程把 JSON 行并进 latest,version+1 并唤醒等待者;最后一个客户端
   走后 30 s 回收(StreamHub);exit 1 退避 2/4/8…≤30 s 重启,exit 2 置 error 唤醒客户端。"""
 from __future__ import annotations
@@ -30,7 +30,7 @@ WIDTH = 37      # 字号 2 每行可用的半角列数:2026-10-20 实测「5」+
 COMPACT = 0     # 0: 「螺纹 3215 +0.62%」 1: 去掉 %  2: 再去掉短名后的空格。实测宽度够,保留 %
 CLOCK_MAX_NAMES = 4
 MAX_NAMES = 12          # 12 行最长约 300 字节,低于插件 NavGlasses 的 384 字节 clip;futures-kb kb stream MAX_SYMBOLS 同步为 12
-PAGE_SIZE = 5           # 轮播每页行数 = 眼镜每屏行数(type7 max_lines,默认 5;插件可传 page_size)
+PAGE_SIZE = 7           # 轮播每页行数 = 眼镜每屏行数(2026-10-20 实测 max_lines 8 时显示 7 行;插件按 NavGlasses.visibleLines() 传 page_size)
 PAGE_SECONDS = 5.0      # 轮播默认每页停留秒数
 PAGE_SECONDS_RANGE = (2.0, 60.0)
 FRAME_INTERVAL = 1.0

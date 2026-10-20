@@ -12,7 +12,7 @@ import org.json.JSONObject;
 
 /** 期货盯盘(bill 分支):订阅 Mac 网关的 SSE 行情文字流,每帧 `NavGlasses.offer(text)` 推到眼镜业务 19 文字面板。
  *  排版在网关(≤4 品种首行时钟、每行「短名 价格 涨跌」),这里只做:品种选择(≤12,r10 前 ≤5)、SSE 订阅与退避重连、
- *  超过一屏的显示方式(r10:scroll = 一帧全部行、眼镜滚轮翻;rotate = 网关每 N 秒换一页)只是流地址上的参数、
+ *  超过一屏的显示方式(r10:scroll = 一帧全部行、眼镜滚轮翻;rotate = 网关每 N 秒换一页;r12 实机后默认 rotate、一屏 7 行)只是流地址上的参数、
  *  55 分钟续期(WatchSession 状态机 + NavGlasses.renew())、BackgroundWork 租约、语音启停。全部在主线程调用。
  *  流地址 = 模型端点(…/v1/chat/completions)的 origin + /v1/watch/stream,Key 复用 SecretStore 的 model_key。
  *  另保留 P0 探针(合成行情 / 宽度 / 替换-追加),用于固件或宿主升级后复测面板行为。 */
@@ -37,7 +37,7 @@ public final class WatchController {
     static void wordsSeconds(int s){prefs.edit().putInt("words_seconds",s).apply();}
     static boolean wordsShuffle(){return prefs.getBoolean("words_shuffle",false);}
     // ---- 超过一屏的显示方式(r10):rotate=true 轮播,否则滚轮;轮播每页秒数 2–60 ----
-    static boolean rotate(){return prefs.getBoolean("rotate",false);}
+    static boolean rotate(){return prefs.getBoolean("rotate",true);} // r12 默认轮播:固件每次更新跳回最后一页,滚轮翻看撑不过 3 s
     static void rotate(boolean on){prefs.edit().putBoolean("rotate",on).apply();}
     static int pageSeconds(){return prefs.getInt("page_seconds",5);}
     static void pageSeconds(int s){prefs.edit().putInt("page_seconds",Math.max(2,Math.min(60,s))).apply();}
@@ -108,7 +108,7 @@ public final class WatchController {
     static String start(){
         if(running)return restart();
         String why=precheck(false);if(why!=null)return why;
-        final String key;try{StringBuilder q=new StringBuilder();for(String n:names()){if(q.length()>0)q.append(',');q.append(n);}streamUrl=origin()+"/v1/watch/stream?names="+URLEncoder.encode(q.toString(),"UTF-8")+"&mode="+(rotate()?"rotate":"scroll")+"&page_seconds="+pageSeconds()+"&page_size="+NavGlasses.captionLines;key=SecretStore.get(app);}catch(Exception e){return "拼接流地址失败";}
+        final String key;try{StringBuilder q=new StringBuilder();for(String n:names()){if(q.length()>0)q.append(',');q.append(n);}streamUrl=origin()+"/v1/watch/stream?names="+URLEncoder.encode(q.toString(),"UTF-8")+"&mode="+(rotate()?"rotate":"scroll")+"&page_seconds="+pageSeconds()+"&page_size="+NavGlasses.visibleLines();key=SecretStore.get(app);}catch(Exception e){return "拼接流地址失败";}
         return begin("盯盘",key,"盯盘连接中…","已开始，等待行情流");
     }
     /** 开始背单词:网关 /v1/words/stream 每 seconds 秒一帧(单词 / 音标 / 释义已排好版);返回 null = 已开始。 */

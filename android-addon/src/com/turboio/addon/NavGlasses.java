@@ -12,8 +12,9 @@ public final class NavGlasses {
     private static int textSubmitted,textCompleted;private static boolean navigationSession;private static long lifetime=240000,interval=3000;
     // bill 分支(盯盘 P0):字号可调 + type3 关闭帧的 SDK 回执计数(续期设计依赖「关闭已送达」这个信号)。
     static int captionFont=2;private static int closeCompleted,closeFailed;
-    // r10(2026-10-20):type7 config 的 max_lines 开放可调(5/8/10),看固件是否直接多显示几行;官方与上游都钉 5。
-    static int captionLines=5;
+    // r10(2026-10-20):type7 config 的 max_lines 开放可调(5/8/10);官方与上游都钉 5。r12 实机:max_lines 8 与 10 都只显示 7 行(字号 2 屏高所限),
+    // 默认改 8 → 一屏 7 行;visibleLines() 给网关做轮播每页行数。
+    static int captionLines=8;static int visibleLines(){return Math.min(captionLines,7);}
     // 盯盘续期:renew() 置 autoIdle 后发 type3;SDK 确认关闭帧送达即自动回 idle(不等用户确认),失败仍走 uncertain。其他调用方语义不变。
     private static boolean autoIdle;
     // 盯盘停止顺序(2026-10-20 实机:停止后行情文字留在镜片上):type5 文字帧在途时不立刻发 type3,先等它的 SDK 回执,

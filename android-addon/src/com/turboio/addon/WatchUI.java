@@ -3,7 +3,7 @@ import android.app.*;import android.os.*;import android.widget.*;import java.uti
 /** 期货盯盘页(bill 分支):添加合约(≤12,r10 前 ≤5;超过一屏 = 眼镜滚轮翻 / 轮播)、开始/停止、确认眼镜已回首页、诊断探针。关页不停盯盘(后台继续要在设置里开「后台运行」)。 */
 final class WatchUI {
  static void show(Activity a){EditorialUI.Screen s=new EditorialUI.Screen(a,"期货盯盘");LinearLayout b=s.body;
-  b.addView(EditorialUI.text(a,"眼镜文字面板显示所选合约的最新价与涨跌幅，约 1 秒一帧；超过一屏（默认 5 行）时可用眼镜滚轮翻看，或改为自动轮播。面板会占满眼镜画面，期间音乐/阅读/导航不可用。会话每 55 分钟自动续开。眼镜上长按实体键会退出面板但手机不会知道，再点一次「开始盯盘」或对眼镜说「开始盯盘」即可重新投上去。退后台继续需在设置里开「后台运行」。",14,EditorialUI.MUTED));
+  b.addView(EditorialUI.text(a,"眼镜文字面板显示所选合约的最新价与涨跌幅，约 1 秒一帧；一屏 7 行，超过时默认自动轮播翻页。面板会占满眼镜画面，期间音乐/阅读/导航不可用。会话每 55 分钟自动续开。眼镜上长按实体键会退出面板但手机不会知道，再点一次「开始盯盘」或对眼镜说「开始盯盘」即可重新投上去。退后台继续需在设置里开「后台运行」。",14,EditorialUI.MUTED));
   TextView state=EditorialUI.text(a,"",14,EditorialUI.LIME);b.addView(state);
   EditorialUI.button(a,b,"开始盯盘 / 重新投到眼镜",true,()->run(a,WatchController.start()));
   EditorialUI.button(a,b,"停止盯盘",false,()->WatchController.stop("用户停止"));
@@ -22,7 +22,7 @@ final class WatchUI {
    WatchController.resolve(q,(label,display,failure)->{if(failure!=null){EditorialUI.notice(a,failure);return;}List<String> cur=new ArrayList<>(WatchController.names());if(cur.contains(label)){EditorialUI.notice(a,label+" 已在列表");return;}if(cur.size()>=max){EditorialUI.notice(a,"最多 "+max+" 个，先移除一个");return;}cur.add(label);WatchController.names(cur);input.setText("");render[0].run();});});
   // 超过一屏的显示方式(r10):滚轮(默认,一帧全部行)/ 轮播(网关每 N 秒换页);改了下一次开始生效
   LinearLayout page=EditorialUI.card(a,b);page.addView(EditorialUI.text(a,"超过一屏时",15,EditorialUI.INK));
-  page.addView(EditorialUI.text(a,"默认一帧把全部合约发上去，用眼镜滚轮上下翻看；若滚轮翻不动或每次更新都被拉回首页，改用自动轮播。改动在下一次开始生效。",14,EditorialUI.MUTED));
+  page.addView(EditorialUI.text(a,"一屏 7 行。默认自动轮播：网关按秒换页，首行末尾显示页码。关掉轮播 = 一帧发全部行、用眼镜滚轮翻看，但固件每次更新都会跳回最后一页（2026-10-20 实测只能停 3 秒），只适合盯最后 7 个。改动在下一次开始生效。",14,EditorialUI.MUTED));
   final TextView[] secs=new TextView[1];
   EditorialUI.toggle(a,page,"自动轮播（网关按秒换页，首行末尾显示页码）",WatchController.rotate(),(v,on)->WatchController.rotate(on));
   secs[0]=EditorialUI.button(a,page,"轮播每页停留 "+WatchController.pageSeconds()+" 秒（点按切换 3 / 5 / 8 / 10）",false,()->{int cur=WatchController.pageSeconds();int next=cur<5?5:cur<8?8:cur<10?10:3;WatchController.pageSeconds(next);secs[0].setText("轮播每页停留 "+next+" 秒（点按切换 3 / 5 / 8 / 10）");});
@@ -30,7 +30,7 @@ final class WatchUI {
   LinearLayout diag=EditorialUI.card(a,b);diag.addView(EditorialUI.text(a,"诊断 · 面板探针（固件或 App 升级后复测）",15,EditorialUI.INK));
   EditorialUI.toggle(a,diag,"字号 1（默认 2，下一次开始生效）",NavGlasses.captionFont==1,(v,on)->NavGlasses.captionFont=on?1:2);
   final TextView[] lines=new TextView[1];
-  lines[0]=EditorialUI.button(a,diag,"每屏行数 max_lines="+NavGlasses.captionLines+"（点按切换 5 / 8 / 10，下一次开始生效）",false,()->{int cur=NavGlasses.captionLines;int next=cur<8?8:cur<10?10:5;NavGlasses.captionLines=next;lines[0].setText("每屏行数 max_lines="+next+"（点按切换 5 / 8 / 10，下一次开始生效）");});
+  lines[0]=EditorialUI.button(a,diag,"每屏行数 max_lines="+NavGlasses.captionLines+"（默认 8 = 显示 7 行；点按切换 5 / 8 / 10，下一次开始生效）",false,()->{int cur=NavGlasses.captionLines;int next=cur<8?8:cur<10?10:5;NavGlasses.captionLines=next;lines[0].setText("每屏行数 max_lines="+next+"（默认 8 = 显示 7 行；点按切换 5 / 8 / 10，下一次开始生效）");});
   EditorialUI.toggle(a,diag,"停止前先发一帧空白清屏（若停止后行情仍留在镜片上再开）",NavGlasses.clearBeforeClose,(v,on)->NavGlasses.clearBeforeClose=on);
   EditorialUI.toggle(a,diag,"语音指令后主动收尾官方助手（官方 next=true 时调 stop_assistant+phone_exit 关语音框；若它把面板也关了就关掉此开关）",TurboAddon.localStop,(v,on)->TurboAddon.localStop=on);
   EditorialUI.button(a,diag,"盯盘测试 · 合成 5 行行情 3 分钟",false,()->run(a,WatchController.startTest()));

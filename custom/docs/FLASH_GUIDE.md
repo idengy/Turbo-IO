@@ -117,7 +117,7 @@
 | 签名 guarded 包 SHA-256 / 证书指纹 | **r2 `27010e75ef0ea16c75f96b2a3897b4cad31bc718477d5f597548875cae257179`** / `4f941f05…e8478`(Bill 终端 `sign_guarded.sh` 5/5,verify --guarded 两项 true;手机 08:51:48 覆盖装,base.apk 哈希一致)。r1 `5651caad…` 作废(门禁检测 bug) |
 | 手机系统版本(设置 → 系统升级) | Android 16 / OriginOS 6 / `PD2436G_A_16.1.17.12.W10`(2026-10-19 adb getprop);装前手机上是 A 段 r2 自签包 `abe3b10f…`(adb sha256sum 核对一致,同证书,可 `install -r` 保数据);电量 93% 充电中 |
 | 眼镜刷前固件版本 | |
-| 第 1 步:覆盖安装是否顺利;插件页首行是否 `ANDROID-106 … TMIG1`;配对/语音是否正常 | 第一轮 2026-10-20 08:41:`install -r` 成功、业务 15 收包正常;但升级入口弹「门禁未装」= 插件 `NavReflect` 标记检测 bug(见 TODO C1),重打包第二轮待装 |
+| 第 1 步:覆盖安装是否顺利;插件页首行是否 `ANDROID-106 … TMIG1`;配对/语音是否正常 | 第一轮 2026-10-20 08:41:`install -r` 成功、业务 15 收包正常,但升级入口弹「门禁未装」(插件 `NavReflect` 标记检测 bug)。**第二轮 r2 `27010e75…` 08:51 装,Bill 确认首行 `ANDROID-106 · OFFICIAL-OTA-GUARD-01 · TMIG1`、眼镜语音正常 → 第 1 步通过** |
 | 第 2 步:更新说明是否出现 TMIG1 GUARDED | |
 | 第 3 步:目录 16/16?三项 true?开始安装时间 | |
 | 传输用时 / 片数 / AP 覆盖 / 眼镜重启用时 | |

@@ -20,12 +20,12 @@
 ### C 段(Bill 亲手,按 `custom/docs/FLASH_GUIDE.md`)
 - [x] C0 ②签名 2026-10-19 17:37 Bill 终端跑 `sign_guarded.sh` 5/5 过:签名包 `local/build/TurboIO-RayNeo-1.0.6-guarded-signed.apk` SHA `5651caad…47b0`,指纹仍 `4f941f05…`,verify `--guarded` exit 0(已记 SUMS 与 FLASH_GUIDE 第 4 节)。①换口令**未做**(口令两次进了聊天,Bill 签完自己换,不影响已签包);③④见下行
 - [ ] C0 其余(Bill 自己终端):①换 keystore 口令 `source custom/scripts/env.sh && keytool -storepasswd -keystore local/keys/turboio-bill.p12`;②`bash custom/scripts/sign_guarded.sh`(含 verify `--guarded`,产出 `local/build/TurboIO-RayNeo-1.0.6-guarded-signed.apk`,SHA 进 SUMS 与 FLASH_GUIDE 第 4 节);③关官方 App 自动更新;眼镜 ≥50%、手机充电、蓝牙只连这副眼镜
-- [ ] C1 `adb install -r` 覆盖装(数据保留);插件升级页首行 `ANDROID-106 · OFFICIAL-OTA-GUARD-01 · TMIG1`;**配对/语音/Hermes 正常 = 搬类没坏官方蓝牙发送**(这是 B 段唯一不能离线验的点)
+- [x] C1 `adb install -r` 覆盖装(数据保留);插件升级页首行 `ANDROID-106 · OFFICIAL-OTA-GUARD-01 · TMIG1`;**配对/语音/Hermes 正常 = 搬类没坏官方蓝牙发送**(这是 B 段唯一不能离线验的点)—— 2026-10-20 两轮后通过,见下
   - [x] C1 第一轮 2026-10-20 08:41(手机时钟)Bill `adb install -r` 签名包 `5651caad…` 成功(手机 base.apk 哈希一致、数据保留)。**装后插件收业务 15 消息正常**(logcat 新进程 23859 连续 rx business=15),搬类没坏官方蓝牙接收
   - [x] C1 第一轮 ❌ 点「实验固件升级」弹 A 段「门禁未装」提示。**根因:我 B5 的 bug**——`guarded` 只在 `NavReflect.ensure()` 里算,而正常启动 `TurboAddon.install` 先调 `select(216)`,`ensure()` 见 `selected!=0` 直接返回,`guarded` 永远 false;离线测不到(OTA 测试用 `tests/otaflow/NavReflect.java` 桩)。修法:`NavReflect.guarded()` 独立于 select/ensure,打开 `turboio/official-ota-guarded.txt` 比对完整钉死文本(宿主 Application 还没起来时不缓存结果);`ApkAssemblyTest` 加断言三处钉值(prep / verify / NavReflect)一致。`build.sh` exit 0(classes.dex `d483eb72…`)。首页页脚 `ANDROID 1.0.5 · INTEGRATION-08 / CALLBACK-01` 是上游 `EditorialUI` 固定文案,不是版本证据;guarded 标识只在升级页首行
   - [x] C1 第二轮打包 2026-10-19:libapp 补丁重生成到 `local/work/host-106-libapp-patched/`(SHA `96cc9a9f…` 一致);B7 产物改名 `*.b7-20261019` 留档;`package.mjs` exit 0(unsigned r2 `9406b7c8…`)→ `--guarded` exit 0 → **guarded-unsigned r2 `e2a4b24b…`**,verify `--guarded` exit 0、unexpected 空、guarded 两项 true;包内 classes6.dex == 修复后 dex `d483eb72…`,含两条钉值字符串。`sign_guarded.sh` 钉值改 r2,旧签名包自动改名留档
   - [x] C1 第二轮签名+装机 2026-10-20 08:51(手机时钟):Bill `sign_guarded.sh` 5/5 → 签名包 r2 **`27010e75…7179`**(SUMS 已记,指纹不变)→ `adb install -r` 成功,手机 base.apk 哈希一致
-  - [ ] C1 第二轮验收(Bill 手机上看):点「实验固件升级」应进 OfficialOtaBridge 页,首行 `ANDROID-106 · OFFICIAL-OTA-GUARD-01 · TMIG1`、状态 LOCKED/授权 0;配对/语音/Hermes 复核
+  - [x] C1 第二轮验收 2026-10-20(Bill 确认):升级页首行 `ANDROID-106 · OFFICIAL-OTA-GUARD-01 · TMIG1` ✅;眼镜语音提问正常 ✅(中间 502 是 Mac 网关没在跑,与新包无关,已装 LaunchAgent 根治)。**C1 通过:guarded r2 在手机上跑通,官方蓝牙收发未受搬类影响**
 - [ ] C2 15 分钟只下载 → 官方更新说明出现 TMIG1 GUARDED → 下载到软件就绪不安装
 - [ ] C3 只读预检「官方目录 16/16」三项 true(目录名 `Strix_OS_1.0.5.5` 是推断,不通过就停、导状态文件回 B 段)→ 输入 TMIG1 授权 → 两分钟内官方页开始安装一次
 - [ ] C4 自然重启 → TMIG1 新菜单 → 只读回查 → 解除结果保护 → LOCKED/授权 0;填记录表

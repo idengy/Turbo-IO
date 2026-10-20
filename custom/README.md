@@ -21,7 +21,7 @@ Bill 自己的功能代码与文档。子目录约定见根 CLAUDE.md「目录�
 备选：有道 PC 版「单词本 → 导出」得到 XML，用 `--xml 文件` 读。
 手机 App 与网页条数不一致时：多半是两边登的账号不同（手机号 / 微信 / QQ 各是独立账号），或 App 没把本地词同步到云端；脚本拉的就是网页这个账号云端的词。
 
-**2. 同步**：`python3 custom/glasses-gateway/youdao_sync.py`（或 `--xml 导出.xml`）→ 写 `local/words/wordbook.json`，原始响应落 `local/words/raw/<时间>.json`。网页列表接口不含音标，脚本用公开的 `dict.youdao.com/jsonapi`（免登录）逐词补英/美音标（默认美音，`--phonetic uk|none` 可改），结果缓存 `local/words/phonetic-cache.json`，下次只查新词。打印「写入 … N 词；单词本 {…}；本次新查音标 K 词；仍无音标 M 词」，N 应等于有道网页端的总数。Cookie 过期时报「401 用户未登录」或「接口返回 0 条」并以非 0 退出，**不覆盖**旧词库——重新复制 Cookie 再跑。网关按文件 mtime 热重载，同步后不用重启。
+**2. 同步**：`python3 custom/glasses-gateway/youdao_sync.py`（或 `--xml 导出.xml`）→ 写 `local/words/wordbook.json`，原始响应落 `local/words/raw/<时间>.json`。列表条目自带英美音标（默认取美音，`--phonetic uk` 取英音）；个别词典里没有的词用公开的 `dict.youdao.com/jsonapi`（免登录）再补一次（`--phonetic none` 不补），结果缓存 `local/words/phonetic-cache.json`，下次只查新词。打印「写入 … N 词；单词本 {…}；本次新查音标 K 词；仍无音标 M 词」，N 应等于有道网页端的总数。Cookie 过期时报「401 用户未登录」或「接口返回 0 条」并以非 0 退出，**不覆盖**旧词库——重新复制 Cookie 再跑。网关按文件 mtime 热重载，同步后不用重启。
 
 **3. 路由**（同一把 Bearer）：`GET /v1/words/status` → `{total, position, current_id, book_counts, updated, width, ascii_per_cell}`；`GET /v1/words/stream?seconds=6&order=seq|shuffle&probe=0|1` → SSE `data: {"type":"panel","text":"单词  /音标/\n释义…","index":n,"total":N}`，每 `seconds`（3–60）一帧，一个词释义太长拆成多帧（后续帧首行仍是单词），帧间隔 >10 s 补 `: hb`；`probe=1` 循环发标尺帧（数字 50 / 小写 52 / 汉字 24 / IPA / 混排）不动游标；词库空发 `{"type":"error"}` 后关。游标 `local/words/state.json`：顺序模式按添加时间倒序循环、断线重连与网关重启都接着上次；随机模式一轮内不重复。
 

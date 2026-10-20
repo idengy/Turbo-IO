@@ -5,8 +5,8 @@
   1) 网页版接口(默认):Chrome 登录 https://www.youdao.com/webwordbook/wordlist (2026-10-20 实测:旧址 dict.youdao.com/wordbook/ 是 404),
      DevTools → Network → 过滤 Fetch/XHR → 名字为 `list?limit=48&offset=0…` 的请求 → Request Headers 的 Cookie 整行值,一行存
      `local/config/youdao-cookie.txt`。脚本分页 GET https://dict.youdao.com/wordbook/webapi/v2/word/list(页面 bundle 0bb1cbf.js 里读到的真实接口,
-     参数 limit/offset/sort=time|alpha/lanTo/lanFrom;未登录返回 code 401)。列表只给 word/trans/itemId/lanFrom/lanTo,**不含音标**,
-     所以再用公开的 https://dict.youdao.com/jsonapi?q=<word>(免登录)补英/美音标,结果缓存在 `local/words/phonetic-cache.json`。
+     参数 limit/offset/sort=time|alpha/lanTo/lanFrom;未登录返回 code 401)。条目字段实测:itemId/word/lanFrom/lanTo/trans/usphone/ukphone/
+     createTime(ISO 串);个别词音标为空,再用公开的 https://dict.youdao.com/jsonapi?q=<word>(免登录)补,缓存在 `local/words/phonetic-cache.json`。
   2) `--xml 有道导出.xml`:有道 PC 版「单词本 → 导出」的 XML(<item><word><trans><phonetic>)。
 原始响应落 `local/words/raw/<时间>.json` 方便核对字段;Cookie 失效(401 / code!=0 / total=0 且列表空)报错退出(非 0),**不覆盖**旧词库。
 Cookie 不打印、不进日志。纯标准库。"""
@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from datetime import datetime
 import re
 import sys
 import time
@@ -62,29 +63,42 @@ def split_trans(text: str) -> list[str]:
     return [p.strip() for p in parts if p.strip()]
 
 
-def normalize_web(items: list[dict], books: dict[str, str]) -> list[dict]:
+def _epoch(v) -> int:
+    """createTime 可能是毫秒数、秒数或 ISO 字符串(v2 实测 "2026-10-20T07:57:50.820+0000")→ 秒;解析不了返回 0。"""
+    if v in (None, ""):
+        return 0
+    try:
+        n = int(v)
+        return n // 1000 if n > 10**12 else n
+    except (TypeError, ValueError):
+        pass
+    txt = str(v).strip()
+    txt = re.sub(r"([+-]\d{2})(\d{2})$", r"\1:\2", txt).replace("Z", "+00:00")
+    try:
+        return int(datetime.fromisoformat(txt).timestamp())
+    except ValueError:
+        return 0
+
+
+def normalize_web(items: list[dict], books: dict[str, str], prefer: str = "us") -> list[dict]:
+    """v2/word/list 条目实测字段(2026-10-20):itemId/word/lanFrom/lanTo/trans/usphone/ukphone/createTime;旧接口字段名也兼容。"""
+    phon_keys = ("usphone", "ukphone", "phonetic") if prefer != "uk" else ("ukphone", "usphone", "phonetic")
     out = []
     for it in items:
         word = str(_pick(it, "itemName", "word", default="")).strip()
         if not word:
             continue
         book_id = str(_pick(it, "bookId", default=""))
-        added = _pick(it, "modifiedTime", "createTime", "addTime", default=0)
-        try:
-            added = int(added)
-            if added > 10**12:  # 毫秒 → 秒
-                added //= 1000
-        except (TypeError, ValueError):
-            added = 0
+        added = _epoch(_pick(it, "modifiedTime", "createTime", "addTime", default=0))
         out.append({"id": str(_pick(it, "itemId", "id", default=word)), "word": word,
-                    "phonetic": str(_pick(it, "phonetic", default="")).strip(),
+                    "phonetic": str(_pick(it, *phon_keys, default="")).strip(),
                     "trans": split_trans(str(_pick(it, "trans", "translation", default=""))),
                     "book": str(_pick(it, "bookName", default=books.get(book_id, "默认"))),
                     "lang": str(_pick(it, "lanFrom", default="en")), "added": added})
     return out
 
 
-def fetch_web(cookie: str, raw_dir: Path) -> list[dict]:
+def fetch_web(cookie: str, raw_dir: Path, prefer: str = "us") -> list[dict]:
     try:
         books_resp = _get(f"{BASE}/books", cookie)
     except urllib.error.HTTPError:
@@ -113,7 +127,7 @@ def fetch_web(cookie: str, raw_dir: Path) -> list[dict]:
     (raw_dir / f"{stamp}.json").write_text(json.dumps({"books": books_resp, "total": total, "items": items}, ensure_ascii=False, indent=1), encoding="utf-8")
     if total == 0 and not items:
         raise SystemExit("接口返回 0 条:要么单词本真的空,要么 Cookie 已过期/未登录。重新从 Chrome 复制 Cookie 后再试;旧词库未改动")
-    return normalize_web(items, books)
+    return normalize_web(items, books, prefer)
 
 
 # ---------- 音标 ----------
@@ -184,7 +198,7 @@ def main(argv=None) -> int:
     ap.add_argument("--xml", type=Path, help="改读有道 PC 版导出的 XML")
     ap.add_argument("--cookie", type=Path, default=COOKIE_FILE, help=f"Cookie 文件(默认 {COOKIE_FILE.relative_to(ROOT)})")
     ap.add_argument("--out", type=Path, default=WORDS_DIR, help="输出目录(默认 local/words)")
-    ap.add_argument("--phonetic", choices=("us", "uk", "none"), default="us", help="缺音标时用 jsonapi 补哪种(默认美音;none 不补)")
+    ap.add_argument("--phonetic", choices=("us", "uk", "none"), default="us", help="音标取美音还是英音(默认美音);缺的用 jsonapi 补,none 不补")
     a = ap.parse_args(argv)
     if a.xml:
         entries = parse_xml(a.xml)
@@ -198,7 +212,7 @@ def main(argv=None) -> int:
                   "Request Headers → Cookie 整行值,存成一行", file=sys.stderr); return 2
         cookie = cookie[len("Cookie:"):].strip() if cookie.lower().startswith("cookie:") else cookie
         try:
-            entries = fetch_web(cookie, a.out / "raw")
+            entries = fetch_web(cookie, a.out / "raw", "uk" if a.phonetic == "uk" else "us")
         except urllib.error.HTTPError as e:
             print(f"HTTP {e.code}:{e.reason}(401/403 = Cookie 过期或不对);旧词库未改动", file=sys.stderr); return 2
         except urllib.error.URLError as e:

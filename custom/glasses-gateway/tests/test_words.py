@@ -145,11 +145,15 @@ class SyncParseTest(unittest.TestCase):
         self.assertEqual(out[1]["book"], "考研"); self.assertEqual(out[1]["id"], "pear")
 
     def test_normalize_v2_list_shape(self):
-        # 2026-10-20 webwordbook 页面的 /webapi/v2/word/list 条目:只有 word/trans/itemId/lanFrom/lanTo,没有音标
-        items = [{"itemId": "x1", "word": "abandon", "trans": "v.抛弃，遗弃；（因危险）离开", "lanFrom": "en", "lanTo": "zh-CHS"}]
+        # 2026-10-20 webwordbook 页面的 /webapi/v2/word/list 条目实测字段(含英美音标、ISO createTime)
+        items = [{"itemId": "x1", "word": "abandon", "trans": "v.抛弃，遗弃；（因危险）离开\nn.放任", "lanFrom": "en", "lanTo": "zh-CHS",
+                  "usphone": "əˈbændən", "ukphone": "əˈbændən-uk", "createTime": "2026-10-20T07:57:50.820+0000"}]
         out = youdao_sync.normalize_web(items, {})
-        self.assertEqual(out[0]["word"], "abandon"); self.assertEqual(out[0]["phonetic"], "")
-        self.assertEqual(out[0]["trans"], ["v.抛弃，遗弃", "（因危险）离开"]); self.assertEqual(out[0]["lang"], "en")
+        self.assertEqual(out[0]["word"], "abandon"); self.assertEqual(out[0]["phonetic"], "əˈbændən")
+        self.assertEqual(out[0]["trans"], ["v.抛弃，遗弃", "（因危险）离开", "n.放任"]); self.assertEqual(out[0]["lang"], "en")
+        self.assertEqual(out[0]["added"], 1792483070)  # 2026-10-20T07:57:50Z
+        self.assertEqual(youdao_sync.normalize_web(items, {}, "uk")[0]["phonetic"], "əˈbændən-uk")
+        self.assertEqual(youdao_sync._epoch(1700000000000), 1700000000); self.assertEqual(youdao_sync._epoch("junk"), 0)
 
     def test_enrich_phonetics_uses_cache_and_skips_non_english(self):
         with tempfile.TemporaryDirectory() as t:

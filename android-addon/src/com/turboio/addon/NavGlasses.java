@@ -12,6 +12,8 @@ public final class NavGlasses {
     private static int textSubmitted,textCompleted;private static boolean navigationSession;private static long lifetime=240000,interval=3000;
     // bill 分支(盯盘 P0):字号可调 + type3 关闭帧的 SDK 回执计数(续期设计依赖「关闭已送达」这个信号)。
     static int captionFont=2;private static int closeCompleted,closeFailed;
+    // 盯盘续期:renew() 置 autoIdle 后发 type3;SDK 确认关闭帧送达即自动回 idle(不等用户确认),失败仍走 uncertain。其他调用方语义不变。
+    private static boolean autoIdle;
     private static long deadline,started,lastSend;private static boolean pending;
     private static Runnable changed;
     public static void listen(Runnable r){changed=r;}
@@ -46,7 +48,9 @@ public final class NavGlasses {
         try{mark("stopping","已请求关闭，待确认镜片退出");deadline=SystemClock.elapsedRealtime()+8000;pending=false;send(3,new JSONObject().put("sid",sid).put("reason_code",10).put("text",""));}
         catch(Exception e){mark("uncertain","退出未确认，请用眼镜按钮关闭");}
     }
-    public static void confirmIdle(){if(phase.equals("starting")||phase.equals("ready"))return;MAIN.removeCallbacks(tick);sid="";device="";latest="";pending=false;mark("idle","已由用户确认镜片退出");}
+    public static void confirmIdle(){if(phase.equals("starting")||phase.equals("ready"))return;autoIdle=false;MAIN.removeCallbacks(tick);sid="";device="";latest="";pending=false;mark("idle","已由用户确认镜片退出");}
+    /** 盯盘 55 分钟续期:只在 ready 时有效;关闭帧被 SDK 确认送达后自动回 idle,由 WatchController 再开新 sid。 */
+    public static void renew(){if(!phase.equals("ready"))return;autoIdle=true;stop();}
     private static void send(int type,JSONObject json)throws Exception{
         if(!device.equals(connected()))throw new IllegalStateException("device_changed");
         Object business=NavReflect.call(NavReflect.type("P3.h"),"valueOf","AI_SUBTITLE"),priority=NavReflect.call(NavReflect.type("E3.b"),"valueOf","NORMAL");
@@ -55,7 +59,7 @@ public final class NavGlasses {
         Object callback=NavReflect.proxy("kotlin.jvm.functions.Function2",(name,args)->MAIN.post(()->{
             if(!sid.equals(owner))return;boolean ok=args.length>1&&args[1]==null;
             if(type==5){pending=false;if(ok){textCompleted++;mark(phase,"导航/测试文字已完成 SDK 发送，镜片效果以实际为准");}}
-            if(type==3){if(ok)closeCompleted++;else if(args.length>1)closeFailed++;}
+            if(type==3){if(ok){closeCompleted++;if(autoIdle&&phase.equals("stopping")){autoIdle=false;MAIN.removeCallbacks(tick);sid="";device="";latest="";pending=false;mark("idle","显示会话已干净关闭，可续期");return;}}else if(args.length>1){closeFailed++;autoIdle=false;}}
             if(args.length>1&&args[1]!=null){if(type==3)mark("uncertain","SDK拒绝退出，请用眼镜按钮关闭");else stop();}
         }));NavReflect.call(manager(),"u",message,callback);
     }
@@ -70,7 +74,7 @@ public final class NavGlasses {
                     pending=true;deadline=now+8000;lastSend=now;sent=latest;
                     textSubmitted++;send(5,new JSONObject().put("sid",sid).put("mode",3).put("status",0).put("content",new JSONObject().put("source_transcript",latest)));
                 }
-            }else if(phase.equals("stopping")&&now>=deadline)mark("uncertain","退出已提交，请确认镜片已回首页");
+            }else if(phase.equals("stopping")&&now>=deadline){autoIdle=false;mark("uncertain","退出已提交，请确认镜片已回首页");}
         }catch(Exception e){stop();}
         if(phase.equals("starting")||phase.equals("ready")||phase.equals("stopping"))MAIN.postDelayed(this,1000);
     }};

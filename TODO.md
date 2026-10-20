@@ -27,6 +27,7 @@
   - [x] C1 第二轮签名+装机 2026-10-20 08:51(手机时钟):Bill `sign_guarded.sh` 5/5 → 签名包 r2 **`27010e75…7179`**(SUMS 已记,指纹不变)→ `adb install -r` 成功,手机 base.apk 哈希一致
   - [x] C1 第二轮验收 2026-10-20(Bill 确认):升级页首行 `ANDROID-106 · OFFICIAL-OTA-GUARD-01 · TMIG1` ✅;眼镜语音提问正常 ✅(中间 502 是 Mac 网关没在跑,与新包无关,已装 LaunchAgent 根治)。**C1 通过:guarded r2 在手机上跑通,官方蓝牙收发未受搬类影响**
 - [ ] C2 15 分钟只下载 → 官方更新说明出现 TMIG1 GUARDED → 下载到软件就绪不安装
+  - [x] 2026-10-20 准备:TMIG1 ZIP 已 `adb push` 到手机 `/sdcard/Download/StrixOS-1.0.5.5-TurboIO-TMIG1-CANDIDATE-NOT-APPROVED.zip`,手机端 sha256sum `f1d3616c…` 与本机一致;手机电量 98% 充电中。眼镜电量 ≥50% 由 Bill 目视确认
 - [ ] C3 只读预检「官方目录 16/16」三项 true(目录名 `Strix_OS_1.0.5.5` 是推断,不通过就停、导状态文件回 B 段)→ 输入 TMIG1 授权 → 两分钟内官方页开始安装一次
 - [ ] C4 自然重启 → TMIG1 新菜单 → 只读回查 → 解除结果保护 → LOCKED/授权 0;填记录表
 - [ ] C5 刷后:仪表盘卡片 / 小应用接 `kb quotes --json`(阶段 4 原计划)

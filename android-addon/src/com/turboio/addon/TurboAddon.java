@@ -10,6 +10,7 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
@@ -45,6 +46,9 @@ public final class TurboAddon {
     private static volatile HttpURLConnection connection;
     private static boolean owns, done, hasFinal;
     private static String diagnostic = "等待眼镜语音";
+    // bill 分支 r9:本地指令(盯盘/背单词)的终态回灌改为「先发非终态一段,等官方本轮 onResponseComplete 到了再发终态」,
+    // 模仿自有模型路径的时序(模型路径的终态永远晚于官方完成)。lastLocal 单独保存最近一次本地指令的官方归类与时序,不被 emit 的 diagnostic 覆盖。
+    private static boolean localPending; private static long localToken, localAt, localOfficialAt; private static String localAnswer = "", lastLocal = "无";
     private static int asrFinals, replacements, completions;
     private static final java.util.concurrent.atomic.AtomicInteger modelRequests = new java.util.concurrent.atomic.AtomicInteger();
     private static volatile int lastHttp;
@@ -97,14 +101,14 @@ public final class TurboAddon {
     private static int mode() { return prefs == null ? 0 : prefs.getInt("mode", 0); }
     public static String status() {
         return REVISION + " | mode=" + mode() + " | final=" + asrFinals + " | replaced=" + replacements
-            + " | complete=" + completions + " | requests=" + modelRequests.get() + " | http=" + lastHttp + " | " + diagnostic;
+            + " | complete=" + completions + " | requests=" + modelRequests.get() + " | http=" + lastHttp + " | " + diagnostic + "\n最近本地指令：" + lastLocal;
     }
     public static void setTestMode() {
         if (prefs != null) { cancel(); prefs.edit().putInt("mode", 1).apply(); }
     }
     private static void cancel() {
         VoiceSpeech.stop("对话已打断或重置");
-        generation++; owns = false; done = false; hasFinal = false; template = null; emitted = "";
+        generation++; owns = false; done = false; hasFinal = false; template = null; emitted = ""; localPending = false;
         HttpURLConnection old = connection; connection = null;
         if (old != null) { Thread closer = new Thread(old::disconnect, "TurboIO-cancel"); closer.setDaemon(true); closer.start(); }
     }
@@ -184,7 +188,10 @@ public final class TurboAddon {
                 String watchAnswer = watchCmd == WatchVoice.Command.START ? WatchController.voiceStart() : watchCmd == WatchVoice.Command.STOP ? WatchController.voiceStop()
                     : watchCmd == WatchVoice.Command.START_WORDS ? WatchController.voiceStartWords() : WatchController.voiceStopWords();
                 diagnostic = "本地指令：" + watchCmd + " → " + watchAnswer + " · 官方归类 " + origin;
-                MAIN.postDelayed(() -> emit(watchToken, watchAnswer, true, null), 300);
+                localPending = true; localToken = watchToken; localAnswer = watchAnswer; localAt = SystemClock.elapsedRealtime(); localOfficialAt = 0;
+                lastLocal = watchCmd + " 官方归类 " + origin + " · 等官方完成…";
+                MAIN.postDelayed(() -> emit(watchToken, watchAnswer, false, null), 300);
+                MAIN.postDelayed(() -> localFinal(watchToken, "8 秒未等到官方完成"), 8000);
                 return true;
             }
             boolean eligible = ChatPolicy.eligible(str(get(response,"Domain")), str(get(response,"Intent")), str(get(response,"Sub")),
@@ -217,7 +224,17 @@ public final class TurboAddon {
         }
     }
     public static boolean onComplete(Object source) {
-        return !Boolean.TRUE.equals(BYPASS.get()) && source == listener && owns;
+        boolean mine = !Boolean.TRUE.equals(BYPASS.get()) && source == listener && owns;
+        if (mine && localPending && localToken == generation) { localOfficialAt = SystemClock.elapsedRealtime(); MAIN.postDelayed(() -> localFinal(localToken, "官方完成后"), 200); }
+        return mine;
+    }
+    /** 本地指令终态:官方本轮完成后(或 8 s 兜底)才发 finished=true + onResponseComplete。 */
+    private static void localFinal(long token, String why) {
+        if (!localPending || token != localToken || token != generation) return;
+        localPending = false;
+        long now = SystemClock.elapsedRealtime();
+        lastLocal = lastLocal.replace(" · 等官方完成…", "") + " · 终态=" + why + " · 官方完成 " + (localOfficialAt == 0 ? "未到" : (localOfficialAt - localAt) + " ms") + " · 终态发出 " + (now - localAt) + " ms";
+        emit(token, localAnswer, true, null);
     }
     private static void invoke(Object target, String method, Object... values) throws Exception {
         Class<?>[] signature = new Class<?>[values.length];

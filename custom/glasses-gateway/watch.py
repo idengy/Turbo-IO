@@ -30,7 +30,7 @@ WIDTH = 37      # 字号 2 每行可用的半角列数:2026-10-20 实测「5」+
 COMPACT = 0     # 0: 「螺纹 3215 +0.62%」 1: 去掉 %  2: 再去掉短名后的空格。实测宽度够,保留 %
 CLOCK_MAX_NAMES = 4
 MAX_NAMES = 12          # 12 行最长约 300 字节,低于插件 NavGlasses 的 384 字节 clip;futures-kb kb stream MAX_SYMBOLS 同步为 12
-PAGE_SIZE = 7           # 轮播每页行数 = 眼镜每屏行数(2026-10-20 实测 max_lines 8 时显示 7 行;插件按 NavGlasses.visibleLines() 传 page_size)
+PAGE_SIZE = 6           # 轮播每页默认行数:2026-10-20 实测 max_lines 8 时短句可见 7 行、带页码的行情行只见 6 行(底部对齐挤掉首行);插件按设置传 page_size 5/6/7
 PAGE_SECONDS = 5.0      # 轮播默认每页停留秒数
 PAGE_SECONDS_RANGE = (2.0, 60.0)
 FRAME_INTERVAL = 1.0

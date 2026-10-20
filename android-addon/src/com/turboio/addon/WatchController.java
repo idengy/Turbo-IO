@@ -40,6 +40,9 @@ public final class WatchController {
     static boolean rotate(){return prefs.getBoolean("rotate",true);} // r12 默认轮播:固件每次更新跳回最后一页,滚轮翻看撑不过 3 s
     static void rotate(boolean on){prefs.edit().putBoolean("rotate",on).apply();}
     static int pageSeconds(){return prefs.getInt("page_seconds",5);}
+    // r14(2026-10-20 实机):探针短句能见 7 行,带页码的行情行只见 6 行、首行被底部对齐挤掉 → 每页行数默认 6,手机可调 5/6/7。
+    static int pageSize(){return Math.max(3,Math.min(7,prefs.getInt("page_size",6)));}
+    static void pageSize(int n){prefs.edit().putInt("page_size",Math.max(3,Math.min(7,n))).apply();}
     static void pageSeconds(int s){prefs.edit().putInt("page_seconds",Math.max(2,Math.min(60,s))).apply();}
     static void wordsShuffle(boolean on){prefs.edit().putBoolean("words_shuffle",on).apply();}
 
@@ -108,7 +111,7 @@ public final class WatchController {
     static String start(){
         if(running)return restart();
         String why=precheck(false);if(why!=null)return why;
-        final String key;try{StringBuilder q=new StringBuilder();for(String n:names()){if(q.length()>0)q.append(',');q.append(n);}streamUrl=origin()+"/v1/watch/stream?names="+URLEncoder.encode(q.toString(),"UTF-8")+"&mode="+(rotate()?"rotate":"scroll")+"&page_seconds="+pageSeconds()+"&page_size="+NavGlasses.visibleLines();key=SecretStore.get(app);}catch(Exception e){return "拼接流地址失败";}
+        final String key;try{StringBuilder q=new StringBuilder();for(String n:names()){if(q.length()>0)q.append(',');q.append(n);}streamUrl=origin()+"/v1/watch/stream?names="+URLEncoder.encode(q.toString(),"UTF-8")+"&mode="+(rotate()?"rotate":"scroll")+"&page_seconds="+pageSeconds()+"&page_size="+pageSize();key=SecretStore.get(app);}catch(Exception e){return "拼接流地址失败";}
         return begin("盯盘",key,"盯盘连接中…","已开始，等待行情流");
     }
     /** 开始背单词:网关 /v1/words/stream 每 seconds 秒一帧(单词 / 音标 / 释义已排好版);返回 null = 已开始。 */

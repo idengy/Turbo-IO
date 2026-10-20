@@ -19,21 +19,31 @@ MIN_SECONDS, MAX_SECONDS, DEFAULT_SECONDS = 3, 60, 6
 HEARTBEAT = 10.0
 
 # ---------- 音标字形 ----------
-# 眼镜字体缺哪些 IPA 字形由探针(ipa_probe_frame)定:Bill 报编号 → 把对应符号填进 IPA_MISSING,layout 用 IPA_FALLBACK 替换,其余原样。
-# 词库 182 词实际用到的符号(2026-10-20 统计)按频次排:ˈ ɪ ə ː ɑ æ ʊ ʃ ʒ ˌ ɡ ɜ ɔ ŋ ʌ θ ɒ;ð 暂未出现但常见,一并探。
+# 2026-10-20 Bill 实机:眼镜字体**没有任何 IPA 字形**(非英文字母的音标符号全是空白),所以音标一律转成 ASCII 近似写法。
+# 替换表取「看得懂」优先:sh/zh/ng/th/dh 用英文拼法,元音沿用 ASCII-IPA 惯例(I=ɪ、U=ʊ、@=ə、A=ɑ、O=ɔ/ɒ、V=ʌ、3=ɜ、ae=æ),重音 ' / , ,长音 : 。
+# 词库 182 词实际用到的符号(2026-10-20 统计)按频次排:ˈ ɪ ə ː ɑ æ ʊ ʃ ʒ ˌ ɡ ɜ ɔ ŋ ʌ θ ɒ;ð 暂未出现但常见。
 IPA_SYMBOLS = "ˈˌːɪəɑæʊʃʒɡɜɔŋʌθɒð"
-IPA_FALLBACK = {"ˈ": "'", "ˌ": ",", "ː": ":", "ɪ": "I", "ə": "@", "ɑ": "a", "æ": "ae", "ʊ": "U", "ʃ": "S", "ʒ": "Z",
-                "ɡ": "g", "ɜ": "3", "ɔ": "O", "ŋ": "N", "ʌ": "V", "θ": "th", "ɒ": "Q", "ð": "dh"}   # X-SAMPA 近似,先用后改
-IPA_MISSING: set = set()   # 探针后填,例如 {"ɪ", "ʊ"}
+IPA_FALLBACK = {"ˈ": "'", "ˌ": ",", "ː": ":", "ɪ": "I", "ə": "@", "ɑ": "A", "æ": "ae", "ʊ": "U", "ʃ": "sh", "ʒ": "zh",
+                "ɡ": "g", "ɜ": "3", "ɔ": "O", "ŋ": "ng", "ʌ": "V", "θ": "th", "ɒ": "O", "ð": "dh",
+                "ɛ": "e", "ɹ": "r", "ɚ": "@r", "ɝ": "3r", "ɫ": "l", "ʔ": "'", "ˑ": ".", "ɐ": "a", "ø": "oe", "ɵ": "o"}
+IPA_ASCII_ONLY = True   # True:音标里所有非 ASCII 字符都替换(表里没有的先按 Unicode 分解取基础字母,再不行丢弃)
 
 
 def safe_ipa(phon: str) -> str:
-    """把眼镜字体缺字形的音标符号换成 IPA_FALLBACK 里的近似写法;IPA_MISSING 为空则原样返回。"""
-    if not IPA_MISSING:
+    """把眼镜显示不了的音标符号换成 ASCII 近似写法。IPA_ASCII_ONLY 关掉则原样返回。"""
+    if not IPA_ASCII_ONLY:
         return phon
-    return "".join(IPA_FALLBACK.get(ch, ch) if ch in IPA_MISSING else ch for ch in phon)
-
-
+    phon = phon.replace("tʃ", "ch").replace("dʒ", "j")   # 双字母先换成英文拼法:church=ch3:ch、judge=jVj
+    out = []
+    for ch in phon:
+        if ord(ch) < 128:
+            out.append(ch)
+        elif ch in IPA_FALLBACK:
+            out.append(IPA_FALLBACK[ch])
+        else:
+            base = "".join(c for c in unicodedata.normalize("NFKD", ch) if ord(c) < 128)
+            out.append(base)  # 例如 é→e;分解不出 ASCII 的直接丢
+    return "".join(out)
 # ---------- 宽度 ----------
 def cell(ch: str) -> float:
     """一个字符占几个汉字格:东亚宽/全角 = 1,其余(英文、音标、数字、标点)= 1/ASCII_PER_CELL。"""
@@ -126,7 +136,8 @@ def layout(entry: dict, width: float = WIDTH, max_lines: int = MAX_LINES) -> lis
 def ipa_probe_frame() -> str:
     """音标字形探针:每个符号前带编号,Bill 报「几号是方块/空白」。第 1 行编号 1–9,第 2 行 10–18,后面是整词对照。"""
     items = [f"{i + 1}{ch}" for i, ch in enumerate(IPA_SYMBOLS)]
-    return "\n".join([" ".join(items[:9]), " ".join(items[9:]), "报哪几号是方块或空白", "/ˌserənˈdɪpəti/ /ˈθɪŋkɪŋ/", "/ɡʊd/ /ɔːl/ /ʒɒ/ /ðæt/ /ɜːθ/"])
+    return "\n".join([" ".join(items[:9]), " ".join(items[9:]), "上两行应全是空白;省略号…应可见",
+                      "/" + safe_ipa("ˌserənˈdɪpəti") + "/ /" + safe_ipa("ˈθɪŋkɪŋ") + "/", "/" + safe_ipa("ɡʊd") + "/ /" + safe_ipa("ɔːl") + "/ /" + safe_ipa("ðæt") + "/ /" + safe_ipa("ɜːθ") + "/"])
 
 
 def ruler_frames() -> list[str]:

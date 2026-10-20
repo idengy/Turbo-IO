@@ -42,7 +42,7 @@ class WidthTest(unittest.TestCase):
 class LayoutTest(unittest.TestCase):
     def test_short_word_one_frame(self):
         f = words.layout({"word": "apple", "phonetic": "ˈæpl", "trans": ["n. 苹果"]})
-        self.assertEqual(f, ["apple  /ˈæpl/\nn. 苹果"])
+        self.assertEqual(f, ["apple  /'aepl/\nn. 苹果"])  # 眼镜无 IPA 字形,音标转 ASCII(2026-10-20)
 
     def test_phonetic_moves_to_second_line_when_too_wide(self):
         f = words.layout({"word": "incomprehensibility", "phonetic": "ɪnˌkɒmprɪˌhensəˈbɪləti", "trans": ["n. 不可理解"]})
@@ -77,18 +77,21 @@ class LayoutTest(unittest.TestCase):
         for i, ch in enumerate(words.IPA_SYMBOLS):
             self.assertIn(f"{i + 1}{ch}", fr)
         self.assertEqual(words.ruler_frames()[0], fr)
-        self.assertEqual(set(words.IPA_FALLBACK), set(words.IPA_SYMBOLS))
+        self.assertTrue(set(words.IPA_SYMBOLS) <= set(words.IPA_FALLBACK))
 
-    def test_safe_ipa_replaces_only_missing(self):
-        old = set(words.IPA_MISSING)
+    def test_safe_ipa_ascii_only(self):
+        self.assertEqual(words.safe_ipa("ˌserənˈdɪpəti"), ",ser@n'dIp@ti")
+        self.assertEqual(words.safe_ipa("ˈθɪŋkɪŋ"), "'thIngkIng")
+        self.assertEqual(words.safe_ipa("ɡʊd ɔːl ðæt ɜːθ café"), "gUd O:l dhaet 3:th cafe")
+        self.assertEqual(words.safe_ipa("tʃɜːtʃ dʒʌdʒ"), "ch3:ch jVj")
+        self.assertTrue(all(ord(c) < 128 for c in words.safe_ipa(words.IPA_SYMBOLS + "ɛɹɚɝ✓")))
+        self.assertEqual(words.layout({"word": "apple", "phonetic": "ˈæpl", "trans": ["n. 苹果"]}), ["apple  /'aepl/\nn. 苹果"])
+        old = words.IPA_ASCII_ONLY
         try:
-            words.IPA_MISSING.clear()
+            words.IPA_ASCII_ONLY = False
             self.assertEqual(words.safe_ipa("ˈæpl"), "ˈæpl")
-            words.IPA_MISSING.update({"æ", "ɪ"})
-            self.assertEqual(words.safe_ipa("ˈæpl ɪ"), "ˈaepl I")
-            self.assertEqual(words.layout({"word": "apple", "phonetic": "ˈæpl", "trans": ["n. 苹果"]}), ["apple  /ˈaepl/\nn. 苹果"])
         finally:
-            words.IPA_MISSING.clear(); words.IPA_MISSING.update(old)
+            words.IPA_ASCII_ONLY = old
 
     def test_clamp_seconds(self):
         self.assertEqual(words.clamp_seconds("x"), words.DEFAULT_SECONDS)

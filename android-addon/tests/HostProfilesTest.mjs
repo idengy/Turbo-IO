@@ -5,7 +5,7 @@ import os from 'node:os';
 import {profileFor,classFile,verifyHost} from '../host-profiles.mjs';
 assert.equal(profileFor('770ba0793d31609aa1e4477db2f8a7aec2c8acc4d9c6ab43d57b0dfc720d3ab3').code,201);
 assert.equal(profileFor('4c1c57ae811cb959478efb5ec510000f7f51ddcb427afff369b1582c66b60206').code,216);
-assert.equal(profileFor('4c1c57ae811cb959478efb5ec510000f7f51ddcb427afff369b1582c66b60206').ota,false);
+assert.equal(profileFor('4c1c57ae811cb959478efb5ec510000f7f51ddcb427afff369b1582c66b60206').ota,true); // B-segment: gates generated from NAMES_106
 assert.throws(()=>profileFor('unknown'));
 const dir=fs.mkdtempSync(path.join(os.tmpdir(),'turbo-host-test-'));
 try {

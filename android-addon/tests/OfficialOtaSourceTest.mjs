@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import {patchAndroidSource,slots} from '../official-ota-source.mjs';
-const original=fs.readFileSync(new URL('../build/host-105/lib/arm64-v8a/libapp.so',import.meta.url));
+const original=fs.readFileSync(new URL('../build/host-106/lib/arm64-v8a/libapp.so',import.meta.url));
 const {output,report}=patchAndroidSource(original);
 assert.equal(output.length,original.length);assert.equal(report.changes.length,2);
 for(const s of slots)assert.equal(output[s.offset-1],original[s.offset-1]);

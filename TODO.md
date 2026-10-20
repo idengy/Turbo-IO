@@ -1,8 +1,29 @@
 # TODO
 
 ## 当前任务
-给 Bill 的雷鸟 iO 眼镜接入 Turbo IO(Android 路线、愿意刷机),再做三个自定义功能:期货仪表盘、自有模型、飞书/知识库消息上镜。
-阶段定义见 CLAUDE.md「阶段与验收」。
+**B 段(2026-10-19 Bill 定,方案 ~/.claude/plans/wiggly-zooming-peach.md):把 Android 1.0.6 插件的 OTA 门禁从 1.0.5/TAP1 换成 1.0.6/TMIG1(Strix OS 1.0.5.5),只做到离线测试全绿 + 产出 guarded APK;C 段(Bill 亲手装机、下载、授权、实刷)另出清单。**
+总目标不变:给 Bill 的雷鸟 iO 眼镜接入 Turbo IO(Android 路线、愿意刷机),再做三个自定义功能:期货仪表盘、自有模型、飞书/知识库消息上镜。阶段定义见 CLAUDE.md「阶段与验收」。
+
+### B 段步骤(2026-10-19)
+- [x] B0 文档先行:CLAUDE.md 版本锁死改 1.0.6(216)/1.0.5.5/TMIG1、改动记录;TODO 本节
+- [x] B1 `OtaPackage.java` 钉值换 TMIG1:16 成员 PINS、ZIP/AP 尺寸与 SHA、manifest 15 行、AP 还原值(7208648 / 0246c12a…)、原厂 manifest canonical SHA `db67ff62…`(用插件自己的 BoundedJson 对原厂 1.0.5.5 清单算出)
+- [x] B2 官方链路常量:Bridge/Preparation 目录 `Strix_OS_1.0.5.5`、口令 `TMIG1`(Bridge/Gate/Session/Controller)、Feed 查询 versionCode `01.00.05.0005`、versionName `0100050005`、下载路径;OtaUI/文案
+- [x] B3 路由补丁重钉 1.0.6 libapp.so(补丁后 libapp SHA `96cc9a9f…`,替换串与上游 1.0.5 相同)(`official-ota-source.mjs`、`package-official-ota-preparation.py`、`OfficialOtaSourceTest.mjs` 读 host-106)
+- [x] B4 `ota-hooks.mjs` 按名表生成(1.0.5/1.0.6 两套),`host-profiles.mjs` 1.0.6 `ota:true`,`package.mjs` 传名表。**坑:官方 1.0.6 classes2.dex 方法引用 65,524 / 上限 65,536,A 段钩子后只剩 2 个,上游钩子体放不下** → 新增 `OtaGates.java`(三段策略各收成一个静态调用)+ `package.mjs` 把 X3/U、X3/u 搬进 `smali_classes5`(apktool 编成 classes5.dex,只含这两类),插件 dex 顺延 classes6;`assemble_apk.py`/`verify_apk.py` 加显式 `--relocated classes5.dex`。细节见 HOST_1.0.6.md「B 段」
+- [x] B5 `NavReflect.otaGatesInstalled()` 改看 guarded 标记资产(或 201)
+- [x] B6 `build.sh` `OTA_CANDIDATE` 可覆盖、默认 TMIG1;Java 测试钉值换 TMIG1(AP 身份字节改为 TMIG1 AP 0x6fd5ed 处的 `Turbo Display`,原厂 AP 无任何 Turbo 字串)
+- [x] B7 2026-10-19:`build.sh` exit 0(OTA 相关 542/301/6/382/132/66/18/27 断言全对 TMIG1 ZIP 通过;classes.dex `bb4eaffd…`)→ `package.mjs` exit 0(unsigned `de9a8634…`,verify unexpected 空,changed 只有 classes2+manifest,added classes5(搬类)+classes6(插件)+白名单 assets)→ `--guarded` 产出 `android-addon/build/TurboIO-RayNeo-1.0.6-guarded-unsigned.apk` **SHA `80a485a6…`**(libapp 只两处串变 + 标记文件,脚本自审计通过);dex 静态复核:classes6 无 TAP1-TEST-01/1.0.4.12/01.00.04.0012,有 TMIG1/1.0.5.5/01.00.05.0005;classes5 恰含 LX3/U; LX3/u;;classes2 方法引用 65,518。SHA 已记 SUMS。**分层:构建通过 ≠ 手机通过 ≠ 眼镜看到**
+- [x] B8 `custom/docs/FLASH_GUIDE.md` 改成 Android 官方链路 + TMIG1 版(第 0 节版本锁 + C 段前置,第 2 节四步,第 3 节停止表,第 4 节记录表)
+- [x] B9 2026-10-19:按 FLASH_GUIDE C0 第 3 条对 guarded 包实跑 `verify_apk`,发现文档写错——`unexpected_paths` 实际是标记文件 + libapp 两项,不是只有 libapp。根因修法:`verify_apk.py` 加 `--guarded` 档位(钉标记文本 `ANDROID-106-OFFICIAL-OTA-GUARD-01-TMIG1` + libapp 补丁后 SHA `96cc9a9f…`,与 `package-official-ota-preparation.py` 同一组钉值,`ApkAssemblyTest` 新用例同时断言两处钉值一致),guarded 包实跑 **exit 0、unexpected 空、guarded 两项 true**;`build.sh` 回归 exit 0。新增 `custom/scripts/sign_guarded.sh`(Bill 自己终端跑:SHA 核对 → zipalign → apksigner v3 交互要口令 → 指纹 `4f941f05…` 必须不变 → verify --guarded → SHA 进 SUMS),apksigner 输出格式已对 A 段签名包核过
+- [x] B 段 2026-10-19 本地提交到 bill 分支(android-addon 15 个文件 + OtaGates.java + 文档 + sign_guarded.sh;glasses-gateway 另一笔)。未 push,push 按红线先问
+
+### C 段(Bill 亲手,按 `custom/docs/FLASH_GUIDE.md`)
+- [ ] C0 前置(Bill 自己终端):①换 keystore 口令 `source custom/scripts/env.sh && keytool -storepasswd -keystore local/keys/turboio-bill.p12`;②`bash custom/scripts/sign_guarded.sh`(含 verify `--guarded`,产出 `local/build/TurboIO-RayNeo-1.0.6-guarded-signed.apk`,SHA 进 SUMS 与 FLASH_GUIDE 第 4 节);③关官方 App 自动更新;眼镜 ≥50%、手机充电、蓝牙只连这副眼镜
+- [ ] C1 `adb install -r` 覆盖装(数据保留);插件升级页首行 `ANDROID-106 · OFFICIAL-OTA-GUARD-01 · TMIG1`;**配对/语音/Hermes 正常 = 搬类没坏官方蓝牙发送**(这是 B 段唯一不能离线验的点)
+- [ ] C2 15 分钟只下载 → 官方更新说明出现 TMIG1 GUARDED → 下载到软件就绪不安装
+- [ ] C3 只读预检「官方目录 16/16」三项 true(目录名 `Strix_OS_1.0.5.5` 是推断,不通过就停、导状态文件回 B 段)→ 输入 TMIG1 授权 → 两分钟内官方页开始安装一次
+- [ ] C4 自然重启 → TMIG1 新菜单 → 只读回查 → 解除结果保护 → LOCKED/授权 0;填记录表
+- [ ] C5 刷后:仪表盘卡片 / 小应用接 `kb quotes --json`(阶段 4 原计划)
 
 ## 步骤
 - [x] 2026-10-16 克隆到 /Users/dyb/PROJECT/Turbo-IO;问清平台(Android)/刷机(愿意)/功能(三项);写 CLAUDE.md;加 upstream 远程;建工作分支 bill
@@ -12,7 +33,7 @@
 - [ ] **2026-10-18 阶段 2 挂起**:眼镜实际固件 Strix OS 1.0.5.5(≠ 1.0.4.12)。上游 Android 路线不适配、无 Android 版 TMIG1、不降级。等上游;眼镜端功能(阶段 4 仪表盘/小应用)连带挂起,手机侧(阶段 3 Hermes、阶段 6 语音备忘)照做
 - [ ] **2026-10-18 Bill 定:自己做 Android 版「新固件插件」,分段做,先 A 段;装 REA 但只配项目级 .mcp.json 不配全局**(上游没有 Android 的 1.0.5.5 适配,自己移植)。三段:
   - A 宿主适配(不刷机):拿 Bill 手机上现用的官方 Android APK(adb pull 或 APK 提取器)→ apktool 反编译 → 在新版混淆代码里重新定位上游 `host-profiles.mjs` 钉死的 6 个类/方法(ASR 监听 `LH7/c$c;`、MainActivity.onPostResume、事件桥 `Lcom/rayneo/rayneo_venus_sdk_plugin/j;`、OTA 队列 `LE3/V;`/发送 `LE3/u;`/包 `LE3/Q;`、高德 key 入口)→ 新增 host profile(新 SHA)→ build.sh 全绿 → 自签名装机 → 验证:登录/配对/官方功能不坏、自有模型(Hermes)、录音导出。产出 = 可用的手机侧插件,已值回票价
-  - B OTA 门禁换成 TMIG1:`OtaPackage` 常量改为 TMIG1(ZIP 8,824,204 B,SHA f1d3616c…,15 负载 + OtaFileInfo,含 bt_controller.bin,AP 7,373,064 B);`official-ota-source.mjs` 在新版 libapp.so 里重定位两条升级查询字符串(Dart 快照序列化格式与偏移都要重核);对照 iOS `tmig1-edition/ExperimentalOTA*.m` 的新版 Mode 2 流程改 Android `OfficialOta*`/`OtaController`;build.sh 的 OTA 离线测试全部指向 TMIG1 ZIP
+  - B OTA 门禁换成 TMIG1(**2026-10-19 预研:1.0.6 libapp.so(SHA e9ab4326…,46,465,968 B)里 `/xrlauncherapi/v1/signApi/gray/upgrade` @0x885c9a、`/xrlauncherhwapi/v1/signApi/gray/upgrade` @0xe1ffc 均唯一且长度前缀 0xcc/0xd0 正确,路由补丁只需换 sourceSHA 与两处偏移;方案文档另出**):`OtaPackage` 常量改为 TMIG1(ZIP 8,824,204 B,SHA f1d3616c…,15 负载 + OtaFileInfo,含 bt_controller.bin,AP 7,373,064 B);`official-ota-source.mjs` 在新版 libapp.so 里重定位两条升级查询字符串(Dart 快照序列化格式与偏移都要重核);对照 iOS `tmig1-edition/ExperimentalOTA*.m` 的新版 Mode 2 流程改 Android `OfficialOta*`/`OtaController`;build.sh 的 OTA 离线测试全部指向 TMIG1 ZIP
   - C 实刷 TMIG1(Bill 亲手):固件本身 iOS 已实刷验证,Android 投递是首次;照 FLASH_GUIDE 四步 + 记录表。退路:上游归档了官方原始 1.0.5.5 ZIP,但上游也不保证同版本重装
   - [x] 2026-10-18 前置工具链,**全部装在项目 local/,未装任何全局依赖**(所以没触红线):JDK 用 Homebrew 现成 openjdk@17;Android cmdline-tools 23.0(arm64,SHA1 校验)→ `local/android-sdk/`,装 platform-tools(adb 37.0.1)、platforms;android-36、build-tools;36.0.0(d8/zipalign/apksigner 齐);apktool 3.0.3 jar(SHA-256 对 brew 公式)+ 启动器 → `local/tools/apktool/`;jadx-headless-mcp 0.7.1 jar(SHA-256 对 REA 钉值)→ `local/tools/rea-jadx/`;`custom/scripts/env.sh` 一次 source 全生效
   - [x] 2026-10-18 REA:源码克隆到 /Users/dyb/PROJECT/rea(只当文档);`.mcp.json`(项目根,gitignored)注册 `npx -y rea-agents@6.7.0 mcp` + 四个 env;`claude mcp list` 已识别为「Pending approval」。CLI 实测:inspect-adb-client / inspect-apktool-client 认出 local/ 下的 adb、apktool;inspect-android-package 对 GUARD-07 APK(426MB)10 秒装载、19,813 类、包名 com.rayneo.venus.pub 1.0.5(201);search-android-classes 命中 H7.c、inspect-android-class E3.V 列出方法表 → 上游钉死的钩子类在 REA 里能直接查,A 段重定位方法可行
@@ -39,7 +60,21 @@
   - [ ] HTTPS(2026-10-19 Bill 定走 Tailscale):宿主 App 无 networkSecurityConfig、只信系统 CA,自签不可行;本机无域名/隧道工具;手机与 Mac 同网段 192.168.3.0/24。Mac:`brew install --cask tailscale-app`(1.104.1,.pkg 需 sudo,Bill 自己跑)→ 登录 → 管理台开 MagicDNS+HTTPS → `tailscale serve --bg --https=443 http://127.0.0.1:8642`。**Mac 侧已完成(2026-10-19)**:tailscale-app 1.104.1 由 Bill 装;GUI 登录按钮无反应,改用 CLI 授权链接 + `open` 完成登录;节点 `billmac-mini`,tailnet `tail4ce6e5.ts.net`(账号 idengyb@);管理台开 HTTPS 后 `tailscale serve --bg --https=443 http://127.0.0.1:8642` → `https://billmac-mini.tail4ce6e5.ts.net/`(tailnet only);Let's Encrypt 证书首签 28 s,之后 `/v1/models` 200、流式问答经代理 SSE 正常。**插件填写值:地址 `https://billmac-mini.tail4ce6e5.ts.net/v1/chat/completions`、模型 `hermes-agent`、Key = .env 的 API_SERVER_KEY**。注意:serve 配置持久,但依赖 Tailscale.app 开机常驻。手机:Tailscale Android 1.104.1 已下到 `local/downloads/tailscale-android-1.104.1/`(GitHub tailscale/tailscale-android 官方 Release,105.5 MB,SHA `b3a1a81b…` 自算已记 SUMS;签名证书指纹 `5cdb2955…`,DN 写的是 Android/Google Inc. 字样,是 Tailscale 自有发布 key 而非 Play 版,以后升级只能继续用 GitHub 版覆盖),装机后同账号登录
   - [x] 手机(2026-10-19):Tailscale Android 1.104.1 由 Claude adb 装(Bill 授权),同账号登录,节点 `v2436a` 100.113.176.95。**坑:手机常驻 Clash Meta 占 VPN 隧道,与 Tailscale 互斥**,Bill 定「用眼镜时手动关 Clash、开 Tailscale」先验收,长期方案(局域网 TLS + Clash hosts 映射 / 公网域名)另议。插件「模型与对话」:自有模型 + ts.net 地址 + `hermes-agent`,Key 由 Claude `adb shell input text` 从 .env 读入(不经聊天、不进命令文本)
   - [x] 验收(2026-10-19 15:53 手机时钟):眼镜问「你是谁?」→ Hermes gateway.log 收到 api_server 入站并 1.7 s 回 105 字,链路眼镜→插件→Tailscale HTTPS→Hermes 走通;Mac→手机 tailscale ping 17 ms 局域网直连。眼镜上逐字流式显示回答(Bill 确认)。未测:Hermes 跑工具首字延迟几十秒时的表现(保活行每 10 s,理论不超时)。注意插件只接管普通问答意图,导航/天气/待办仍走官方
-- [ ] 阶段 4 期货仪表盘:custom/dashboard/ 取 futures-kb prices/main_contracts + futures-lhb 席位异动 → 卡片/App ZIP → 手动导入验收 → 再评估 HTTPS Server 直连
+- [ ] 阶段 4 期货行情上镜(2026-10-19 Bill 定「两者都要,先语音后刷机」):
+  - [x] **语音问行情(不刷机)2026-10-19 Mac 侧走通**:原厂固件下插件能上镜的通道只有语音问答的回答区(插件换官方回答模板),所以做成 Hermes 工具。futures-kb 新增 `kb/quotes.py`(天勤 `get_quote_list` 全部 65 标准品种主连最新价/涨跌幅,每次开关会话)、`kb quotes` CLI、`kb/mcp_quotes.py` MCP(子进程取数,隔离天勤 stdout)、根目录 `mcp_quotes.sh`;`~/.hermes/config.yaml` `mcp_servers.futures_quotes` 已登记,`hermes mcp list` 可见;API 实测「自选行情」9.3 s 回涨跌前五/后六,「螺纹钢和铁矿现在多少钱」5.7 s 回 3068 / 682.5。自选 = futures-kb 全部跟踪品种(Bill 定),不点名默认按涨跌幅绝对值取前 8
+  - [x] 2026-10-19 眼镜首测「自选行情」**没反应**:Hermes 收到并 13.6 s 回复,但调工具时第一个可见字 11.3 s 才出(curl 实测),眼镜回答区早关(1.7 s 的问答正常)。插件自身上限 90 s,瓶颈在眼镜等首字
+  - [x] 修法:`custom/glasses-gateway/gateway.py`(纯标准库,127.0.0.1:8650)挡在 Hermes 前——行情类问题(行情/多少钱/现价/报价/价格/盘面/自选,且无 为什么/分析/怎么看)直接读 `kb quotes --json` 20 s 缓存、SSE 流式回(冷 1.8 s、热 0 s);其余原样转发 8642。`tailscale serve` 已改指 8650,HTTPS 复验通过;无 Key 仍被 Hermes 401。已知限制:要 Hermes 调工具的分析类问题(「焦煤为什么跌」首字 32 s)眼镜上同样看不到
+  - [x] 2026-10-19 眼镜复测 Bill 确认「行了」(行数未反馈,默认 8 行先不动)
+  - [ ] 网关常驻:LaunchAgent 模板 `custom/glasses-gateway/com.dyb.turboio-gateway.plist`(日志 local/logs/gateway.log),装到 ~/Library/LaunchAgents 要 Bill 点头;现在是本会话后台进程在跑,会话结束即停
+  - [ ] **B/C 段(常驻仪表盘,需刷机)2026-10-19 Bill 选定先做,方案见顶部「当前任务」**:OTA 门禁从 1.0.5 libapp.so 偏移重定位到 1.0.6 + TMIG1 投递(Android 首次、无回滚保证);上游 2026-10-19 仍无 Android 适配(新提交全是 iOS 1.0.7/TMG2)。刷机后仪表盘卡片复用同一数据源 `kb quotes --json`。**先说清:TMIG1 的仪表盘/小应用是版本化快照 + 手机手动确认,不是 tick 级**
+  - [ ] (可选,不刷机)**盯盘模式 · tick 级行情**:原厂固件 business 19 文字通道(插件 `NavGlasses`,云端字幕在用):字幕模式 0.7 秒更新、5 行 384 字、单会话 1 小时;Mac 网关加天勤推送流(TqApi wait_update 常驻 → SSE),插件页订阅后 `NavGlasses.offer(text)`。全屏占用、一屏约 5 合约、手机 App 常驻。先用「发测试文字到眼镜」按钮验证通道在 1.0.6 可用
+  - [ ] (可选,不刷机)**S 段 · 官方股票组件改源喂期货**:2026-10-19 Bill 实测官方仪表盘股票组件加 NVDA 可显示、约 1 分钟刷新、搜不到期货。1.0.6 libapp.so 四条路由唯一命中:`/profileapi/stock/getCodeInfo` @0x862153、`searchCode` @0x8ae085、`searchCode/batch` @0x9f6dea、`delCode` @0x9fb6f6;最短 25 字节,替换前缀要用 `http://[::1]:18796/`。两步:S1 透明转发代理录官方 JSON;S2 本机服务分流(`F.` 前缀查网关,其余转真服务器)。局限:最多 6 项、官方刷新节奏、官方版式
+  - [ ] (可选,排在 B/C 之后)**W 段 · vivo WATCH GT(初代)翻页遥控**(2026-10-19 Bill 定)。上游 Apple Watch 链路 `Watch → WatchConnectivity → iOS 插件 → 业务 15 → 眼镜 AP TGR1 模块 → 原厂输入分发`(`watch-remote/`,74 字节 `TGR:`+32 字节帧,opcode 上一项/下一项/确认/返回,15 s 租期、CRC32、不补发)。**只有眼镜端能原样复用**:TMIG1 已带 `firmware-research/strix-1.0.5.5/src/global-remote-v1/`(13 组离线测试,实机未验收;上游 Apple 版本身「刷完翻页翻不了」未闭环)。手表端、手机端两段全部重写:
+    - [ ] W0 **先不碰手表,手机按钮验证眼镜端**:B/C 刷完 TMIG1 后,android-addon 加 Java 版 `WatchGlobalBridge`(照抄 `watch-remote/Addon/WatchGlobalBridge.m` 65 行 + `Firmware/remote.c` 40 行编解码)+ 四个按钮,经已有 `NativeTransfer.sendMessage`(LAUNCHER = 业务 15)发 HELLO/动作,看眼镜翻不翻。这步同时回答上游没回答的「TGR1 在 TMIG1 上到底能不能翻页」。约 300 行 Java,无外部依赖
+    - [ ] W1 **vivo 链路探针(半天)**:Bill 先去 vivo 开放平台注册 App 拿 appid + 「智能终端 SDK 密钥」(放 `local/config/`);一个最小 rpk(`@blueos.bluexlink.connectionManager`:`interconnect.instance({package,fingerprint})` → `connect.send`/`onMessage`)+ 一个最小 Android 探针 APK(集成 `device-rpc.aar`,manifest 加 appid 与 `health.device.manager.version` meta)。只验两件事:消息能否双向到达、单程延迟。**已知风险**:社区 blueos-watch-app 在 iQOO WATCH GT/BlueOS 3.0 实测 `connectionManager` 加载成功但「不暴露任何可查询方法」,且该机型「回调式 API 一律不回」,而 interconnect 全是回调式——可能侧载应用根本拿不到手机链路。rpk 用社区工具(蓝盒助手)侧载,WATCH GT 在支持名单
+    - [ ] W2 探针通了再接:独立桥 APK 收手表消息 → 广播/Intent → RayNeo 宿主内插件 → W0 的 Java 桥 → 眼镜。**vivo SDK 不进 apktool 重打包的宿主**(classes2.dex 已满、要改宿主 manifest 与签名链)。链路每跳一次 App 加延迟,手表→vivo 健康→桥 APK→宿主→眼镜,单程超 1 s 就不如拧旋钮,W1 要测出数字再定
+    - 文档:vivo 设备侧 interconnect API(developers-watch.vivo.com.cn/api/connect/interconnect/)、手机侧 RPC SDK 接入(…/development-guidance/rpc-sdk-guidance/,2025-12)、手机侧 API(…/mobile-side/);社区实测 github.com/FeiYang-sudo/blueos-watch-app(v3.1.0 手机链路结论)
+  - 原计划:custom/dashboard/ 取 futures-kb prices/main_contracts + futures-lhb 席位异动 → 卡片/App ZIP → 手动导入验收 → 再评估 HTTPS Server 直连
 - [ ] 阶段 5 飞书/知识库消息上镜:先查上游 Android 主动通知现状,再定实现方式
 - [ ] 阶段 6 语音备忘录转写 → Obsidian(2026-10-16 Bill 提出)。上游现状:Android 插件 `RecordingExports.java` 只读扫描官方 App 落盘的音频(m4a/wav/opus…)与 .md/.txt,走系统分享;**官方数据库里的转写文字上游未适配**(「全天智记数据库转写导出未移植」),上游 roadmap「NAS/Obsidian 自动入库未完成」。不依赖眼镜固件
   - [x] 2026-10-18 Bill 答:vault = 本机 `~/Obsidian/第二大脑`,Obsidian Sync 官方无头客户端(`ob sync --continuous`,LaunchAgent com.dyb.obsidian-sync)同步到另一台 Mac 和安卓手机。**写仓库的唯一出口已有:suiji-bot `app/vault.py`**(飞书私聊「随记机器人」→ 随记/文章/复盘),规范见 vault `_约定.md`

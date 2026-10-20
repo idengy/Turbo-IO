@@ -7,7 +7,7 @@ public final class OfficialOtaFeedTest {
  public static void main(String[] args)throws Exception{
   byte[] zip=Files.readAllBytes(Paths.get(args[0]));AtomicLong clock=new AtomicLong(1000);AtomicBoolean guard=new AtomicBoolean(true);
   try(OfficialOtaFeed f=new OfficialOtaFeed(clock::get,guard::get)){
-   int port=f.start(0);String query=OfficialOtaFeed.PATHS[1]+"?packageType=firmware&packageName=strix+OS&glassesType=S3&deviceType=android&versionCode=01.00.04.0012";
+   int port=f.start(0);String query=OfficialOtaFeed.PATHS[1]+"?packageType=firmware&packageName=strix+OS&glassesType=S3&deviceType=android&versionCode=01.00.05.0005";
    ok(data(f.reply(request(port,query,"")))==null);f.arm(zip);
    Map<String,Object> meta=BoundedJson.map(data(f.reply(request(port,query,""))));ok(meta.get("apkMd5").equals(OtaPackage.hash("MD5",zip)));ok(((Number)meta.get("apkSize")).intValue()==zip.length);
    String path=new URI((String)meta.get("downloadUrl")).getRawPath();ok(Arrays.equals(zip,f.reply(request(port,path,"" )).body));
@@ -26,7 +26,7 @@ public final class OfficialOtaFeedTest {
    ok(f.reply(request(port,query+"&packageType=firmware","" )).code==400);
    ok(data(f.reply(request(port,query.replace("android","iOS"),"")))==null);
    ok(data(f.reply(request(port,query.replace("packageType=firmware","packageType=app"),"")))==null);
-   ok(data(f.reply(request(port,query.replace("0012","9999"),"")))==null);
+   ok(data(f.reply(request(port,query.replace("0005","9999"),"")))==null);
    ok(f.reply(request(port,path,"" ).replace("GET ","POST ")).code==405);
    ok(f.reply(request(port,path,"" ).replace("127.0.0.1:","localhost:")).code==400);
    ok(f.reply(request(port,path+"?anything=1","" )).code==404);

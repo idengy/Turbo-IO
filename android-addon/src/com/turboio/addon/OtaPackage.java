@@ -5,26 +5,29 @@ import java.security.MessageDigest;
 import java.util.*;
 import java.util.zip.*;
 
-/** One reviewed TAP1 candidate, not an arbitrary firmware loader. No extracted paths. */
+/** One reviewed TMIG1 candidate (Strix OS 1.0.5.5 base), not an arbitrary firmware loader. No extracted paths.
+ * bill branch 2026-10-19: pins moved from upstream TAP1-TEST-01 (1.0.4.12) to the upstream iOS-validated TMIG1 ZIP;
+ * values cross-checked against official-addon/tmig1-edition/ExperimentalOTA.m PayloadPins(). */
 final class OtaPackage {
- static final String VERSION="Strix OS 1.0.4.12", NAME="TAP1-TEST-01 · 菜单显示TEST";
- static final int ZIP_SIZE=9320672, AP_SIZE=9590856;
- static final String ZIP_SHA="5ef21d8c18501d03fad6edee4fe039649cb567352e30dbd234081ecf97140afa";
- static final String AP_SHA="65e0a5312361ec785eb9ab1659badf182765f4054d4d95fef4c61ceb49dfa4b4";
- // Non-AP pins independently match the archived original 1.0.4.12 OTA payloads.
+ static final String VERSION="Strix OS 1.0.5.5", NAME="TMIG1 · Strix OS 1.0.5.5 新底座迁移";
+ static final int ZIP_SIZE=8824204, AP_SIZE=7373064;
+ static final String ZIP_SHA="f1d3616cfde5d128a9b60baab420559e38d19300838b0b87ceb1010f2ac5c940";
+ static final String AP_SHA="30522ac7d27a6750274fc2441cf7dd8f3d0ba70d43671e5595b411daa3b135f8";
+ // Non-AP pins independently match the archived original 1.0.5.5 OTA payloads (Strix-OS-1.0.5.5-original.zip).
  private static final String[] PINS={
-  "OtaFileInfo.json 2515 6bad48f6b3ce289bbd104c8cdc9ee219d872ba6e0d331ea3f6843bf2aeaf53b5",
+  "OtaFileInfo.json 2700 ff1fa879bfb219b719cecb1cd56a788fb6ae7693d7f154cc0681e0a7b4f75c9d",
+  "bt_controller.bin 625364 0060cc360b04577e8f5ce8f5d54fabde6103a6fef5a1a052260097920165a0c6",
   "cb_fw_venus.bin 114592 8799f12071bdac082218e3601c24ab0989275fc2f7db74e37b8314a225c2cf7d",
   "fac_test_img.bin 1821552 18eb0901c3e0daeae48dd5f015252b6931ea7368f0160c2c985c4e74296d17eb",
-  "images.bin 324283 192fefaa70545856884c89a9186e3f86d8f99a0738b201e116a11bc63011c158",
+  "images.bin 383431 219ba2f7935850a059ac7e6a1ffa181056ce70891501db28238940dfbdc44cc5",
   "lotties.bin 651481 ad66d83a3394034f825a12769aad292fc03e59fa865fe06bc43536b918a0b32b",
-  "nuttx_ap.bin 9590856 "+AP_SHA,
-  "nuttx_apc1.bin 1420248 97d56ffc6dd575ad3d8bf7739d49e491ad7e4a959db8770b653f5302e171fb5c",
+  "nuttx_ap.bin 7373064 "+AP_SHA,
+  "nuttx_apc1.bin 1423532 40ea15260a56b6c642120b3234a871662d0e74709deab14cda64be0949dacb40",
   "nuttx_audio.bin 1461920 549a72c032595e3829da7d63b7e1fd13cceda1a55dfefa7a7cad02db5a9b42ab",
-  "nuttx_bth.bin 1160160 a8f4594868bffbd3bc08a38d1f3899571608e2d57869d147de3d06f3e4f7a12a",
+  "nuttx_bth.bin 1189216 d48cb821f30045ea681cae0bfdab766c6d02be6f7b2bd5a75e1c41dc127d1a30",
   "ota_installer_progress.bin 5616 6fd65d296a667e1a7d94ec129adfd26458a4008ef403b331f855192c36eb3e3f",
   "pil_algo_up_demo_nand.dll 504388 e266726fe055ac6ec6f785a9440e8da7421402f2b4d3d7889039ad9b94e119c2",
-  "pil_algo_vad_demo.dll 433432 7ac5b5191202adea20c62642987fa0049024dde9c386ba6cd08a1f29ddd5c92c",
+  "pil_algo_vad_demo.dll 433900 a3253e86dcdcb92a4d0d32fb4a0800da8761138c021a93d1c1dbca51268b66a2",
   "pil_algo_wakeup_dll_nand.dll 287560 d1594cb8658b228e52c2606d02f1eab696d35a11ed42ddcb725e76a745f5550f",
   "rives.bin 689431 836bc019f7152890b94cafafe2edaa024f317526318349f7833319e41158b104",
   "smf.json 23510 2713dc3a302a65c101fa981500cd8b217766c526b6045bf02db5e9e6763d076d"};
@@ -32,16 +35,16 @@ final class OtaPackage {
  private OtaPackage(Map<String,byte[]> members){this.members=members;}
  static String hash(String algorithm,byte[] bytes){try{byte[] h=MessageDigest.getInstance(algorithm).digest(bytes);StringBuilder out=new StringBuilder();for(byte v:h)out.append(String.format(Locale.ROOT,"%02x",v&255));return out.toString();}catch(Exception e){throw new IllegalStateException("digest unavailable");}}
  static OtaPackage verify(byte[] zip)throws IOException{
-  if(zip==null||zip.length!=ZIP_SIZE||!ZIP_SHA.equals(hash("SHA-256",zip)))throw new IOException("仅接受已审核 TAP1 原样 ZIP，大小或 SHA-256 不符");
+  if(zip==null||zip.length!=ZIP_SIZE||!ZIP_SHA.equals(hash("SHA-256",zip)))throw new IOException("仅接受已审核 TMIG1 原样 ZIP，大小或 SHA-256 不符");
   Map<String,String[]> pins=new HashMap<>();for(String line:PINS){String[] p=line.split(" ");pins.put(p[0],p);}
   Map<String,byte[]> files=new HashMap<>();int total=0;
   try(ZipInputStream in=new ZipInputStream(new ByteArrayInputStream(zip))){ZipEntry e;while((e=in.getNextEntry())!=null){String[] p=pins.get(e.getName());if(p==null||e.isDirectory()||files.containsKey(e.getName()))throw new IOException("ZIP member");int size=Integer.parseInt(p[1]);byte[] data=new byte[size];int at=0,n;while(at<size&&(n=in.read(data,at,size-at))!=-1)at+=n;if(at!=size||in.read()!=-1||!p[2].equals(hash("SHA-256",data)))throw new IOException("member size/hash");total+=size;if(total>19000000)throw new IOException("expanded budget");files.put(e.getName(),data);in.closeEntry();}}
-  if(files.size()!=15)throw new IOException("missing member");
-  try{List<Object> rows=BoundedJson.list(BoundedJson.read(files.get("OtaFileInfo.json")));if(rows.size()!=14)throw new IllegalArgumentException();Set<String> found=new HashSet<>();
-   for(Object value:rows){Map<String,Object> row=BoundedJson.map(value);BoundedJson.keys(row,"Name","Size","Md5","BurnMode","BurnAddr","BurnPath");String name=BoundedJson.text(row.get("Name"),64);byte[] bytes=files.get(name);if(bytes==null||name.equals("OtaFileInfo.json")||!found.add(name)||BoundedJson.number(row.get("Size"),1,AP_SIZE)!=bytes.length||!hash("MD5",bytes).equals(row.get("Md5")))throw new IllegalArgumentException();if(name.equals("nuttx_ap.bin")){row.put("Size",9466560);row.put("Md5","9156b9419c3557e9bd72dc61692d0b4b");}}
+  if(files.size()!=16)throw new IOException("missing member");
+  try{List<Object> rows=BoundedJson.list(BoundedJson.read(files.get("OtaFileInfo.json")));if(rows.size()!=15)throw new IllegalArgumentException();Set<String> found=new HashSet<>();
+   for(Object value:rows){Map<String,Object> row=BoundedJson.map(value);BoundedJson.keys(row,"Name","Size","Md5","BurnMode","BurnAddr","BurnPath");String name=BoundedJson.text(row.get("Name"),64);byte[] bytes=files.get(name);if(bytes==null||name.equals("OtaFileInfo.json")||!found.add(name)||BoundedJson.number(row.get("Size"),1,AP_SIZE)!=bytes.length||!hash("MD5",bytes).equals(row.get("Md5")))throw new IllegalArgumentException();if(name.equals("nuttx_ap.bin")){row.put("Size",7208648);row.put("Md5","0246c12a118e8589593fdd053fddb292");}}
    // Restoring just AP size/MD5 must reproduce the original manifest exactly,
    // including all original row order, burn paths, addresses and burn modes.
-   if(!"1619382c8f0b69f68ba9b8d346017a2e42dcf7518b5d29fc348659e5eaebed2c".equals(hash("SHA-256",BoundedJson.canonical(rows))))throw new IllegalArgumentException();
+   if(!"db67ff62cf58350ef3f781a502c0c20bc378bf6d01272b3cce38494386b374f0".equals(hash("SHA-256",BoundedJson.canonical(rows))))throw new IllegalArgumentException();
   }catch(RuntimeException e){throw new IOException("manifest/AP-only mismatch");}
   return new OtaPackage(files);
  }

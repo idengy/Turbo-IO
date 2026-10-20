@@ -1,14 +1,15 @@
-// Android 1.0.5 only. Offline serialized-string source routing, not an OTA sender.
+// Android 1.0.6 (216) only (bill branch 2026-10-19; upstream pinned 1.0.5). Offline serialized-string source routing, not an OTA sender.
 // Dart 3.11.5 StringSerializationCluster encodes length<<1, then raw one-byte
 // characters. Preserve length AND hash: the canonical table layout is serialized.
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import {pathToFileURL} from 'node:url';
 import {makeRoute,stringHash} from '../official-addon/research/patch-ios105-ota-source.mjs';
-export const sourceSHA='78214ba0e1057871315da1cee17d860415c8b913521e59afc2748e45ead64c6c';
+export const sourceSHA='e9ab4326681c0b53892550b04e03284b2bba2e30adcf22033b8e23e5b3bc66af';
+// pp: informational only (report field); offsets located 2026-10-19 in the official 1.0.6 libapp.so, each string unique.
 export const slots=[
- {offset:0x86e1f5,pp:'0x2c8b8',text:'/xrlauncherapi/v1/signApi/gray/upgrade'},
- {offset:0xd95b8,pp:'0x2c9c0',text:'/xrlauncherhwapi/v1/signApi/gray/upgrade'}
+ {offset:0x885c9a,pp:'n/a',text:'/xrlauncherapi/v1/signApi/gray/upgrade'},
+ {offset:0xe1ffc,pp:'n/a',text:'/xrlauncherhwapi/v1/signApi/gray/upgrade'}
 ];
 const sha=b=>crypto.createHash('sha256').update(b).digest('hex');
 const check=(v,m)=>{if(!v)throw Error(m);};

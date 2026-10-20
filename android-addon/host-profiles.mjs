@@ -15,9 +15,12 @@ export const PROFILES = Object.freeze({
   '770ba0793d31609aa1e4477db2f8a7aec2c8acc4d9c6ab43d57b0dfc720d3ab3':
     Object.freeze({version:'1.0.5', code:201, directory:'host-105', names:NAMES_105, ota:true}),
   '4c1c57ae811cb959478efb5ec510000f7f51ddcb427afff369b1582c66b60206':
-    // A-segment: no OTA wrapper. The official OTA adapter is pinned to 1.0.5 libapp.so offsets;
-    // installing it against 1.0.6 would run wrong offsets. Re-enable in B after re-pinning.
-    Object.freeze({version:'1.0.6', code:216, directory:'host-106', names:NAMES_106, ota:false}),
+    // B-segment (2026-10-19): OTA queue/file gates generated from NAMES_106; the official OTA adapter is
+    // re-pinned to the 1.0.6 libapp.so offsets (official-ota-source.mjs) and the TMIG1 firmware (OtaPackage).
+    // relocate: the official classes2.dex has 65,524 method ids (limit 65,536); the OTA queue/sender classes move
+    // into a new classes5.dex so their wrappers fit. Cross-dex references resolve by name at runtime (multidex).
+    Object.freeze({version:'1.0.6', code:216, directory:'host-106', names:NAMES_106, ota:true,
+      relocate:Object.freeze({dex:'smali_classes5', classes:Object.freeze(['LX3/U;','LX3/u;'])})}),
 });
 export function profileFor(sha) {
   const profile=PROFILES[sha];
@@ -55,6 +58,27 @@ export function classFile(root,descriptor) {
   }
   if(matches.length!==1)throw new Error('Expected one exact class: '+descriptor+' (found '+matches.length+')');
   return matches[0];
+}
+/** Move whole class files into a dedicated smali_classesN folder (new DEX slot). Idempotent: a class already
+ * living in the target folder is left alone; it must exist exactly once (classFile) before and after. */
+export function relocateClasses(root,profile) {
+  const plan=profile.relocate;if(!plan)return [];
+  const target=path.join(root,plan.dex);const moved=[];
+  for(const descriptor of plan.classes) {
+    const file=classFile(root,descriptor);
+    const relative=path.relative(root,file);const dex=relative.split(path.sep)[0];
+    if(dex===plan.dex){moved.push({descriptor,file,already:true});continue;}
+    const destination=path.join(target,relative.split(path.sep).slice(1).join(path.sep));
+    if(fs.existsSync(destination))throw new Error('Relocation target exists: '+destination);
+    fs.mkdirSync(path.dirname(destination),{recursive:true});fs.renameSync(file,destination);
+    if(classFile(root,descriptor)!==destination)throw new Error('Relocation lost '+descriptor);
+    moved.push({descriptor,file:destination,already:false});
+  }
+  // The relocation folder may hold nothing but the planned classes.
+  const walk=d=>fs.readdirSync(d).flatMap(e=>{const f=path.join(d,e);return fs.statSync(f).isDirectory()?walk(f):[f];});
+  const present=walk(target).sort(),planned=moved.map(m=>m.file).sort();
+  if(present.length!==planned.length||present.some((f,i)=>f!==planned[i]))throw new Error('Unexpected files in '+plan.dex+': '+present.join(','));
+  return moved;
 }
 export function verifyHost(root,profile) {
   const n=profile.names;

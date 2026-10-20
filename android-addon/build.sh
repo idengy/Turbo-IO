@@ -33,7 +33,8 @@ javac -encoding UTF-8 -source 8 -target 8 -cp build/test -d build/test tests/Cus
 java -cp build/test CustomEnvelopeTest
 javac -encoding UTF-8 -source 8 -target 8 -cp build/test -d build/test src/com/turboio/addon/{OtaFrame,OtaPackage,OtaRecoveryGuard,OtaSession}.java tests/OtaTest.java tests/OtaRecoveryGuardTest.java
 java -cp build/test com.turboio.addon.OtaRecoveryGuardTest
-ota_candidate=../official-addon/build/app-ap-20260927-test-01/StrixOS-1.0.4.12-TAP1-TEST-01-CANDIDATE-NOT-APPROVED.zip
+# bill branch: OTA tests pin the TMIG1 ZIP (Strix OS 1.0.5.5); override with OTA_CANDIDATE=/path/to/zip
+ota_candidate="${OTA_CANDIDATE:-../local/downloads/firmware-strix-1.0.5.5-tmig1/StrixOS-1.0.5.5-TurboIO-TMIG1-CANDIDATE-NOT-APPROVED.zip}"
 java -cp build/test com.turboio.addon.OtaTest "$ota_candidate"
 javac -encoding UTF-8 -source 8 -target 8 -cp build/test -d build/test src/com/turboio/addon/OfficialOtaFeed.java tests/OfficialOtaFeedTest.java
 java -cp build/test com.turboio.addon.OfficialOtaFeedTest "$ota_candidate"

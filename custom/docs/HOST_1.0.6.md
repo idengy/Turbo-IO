@@ -119,3 +119,11 @@
 - 上游 OTA 门禁只认 1.0.5(`official-ota-source.mjs` 第 1 行「Android 1.0.5 only」,libapp.so 两条 Dart 字符串偏移 0x86e1f5 / 0xd95b8 + sourceSHA 78214ba0…)。**A 段不碰 OTA**,1.0.6 的 libapp.so 偏移要等 B 段重核。A 段产物必须保证不触发任何升级路径。
 - `android-addon/build.sh` 第 36 行要一个固件候选 ZIP `official-addon/build/app-ap-20260927-test-01/StrixOS-…CANDIDATE-NOT-APPROVED.zip`,本仓库没有(只有 `local/downloads/.../TurboIO-TAP1-TEST-01.zip`)。A 段不需要固件,跑 build 时要么跳过 OTA 相关测试段,要么把候选指向本机已有 ZIP——A3 决定。
 - 1.0.6 比 1.0.5 多 1,509 个类,新增部分未审;A 段只关心上表 11 个角色,其余不动。
+
+
+## B 段(2026-10-19):OTA 门禁换 TMIG1 时撞到的 DEX 64K 上限
+
+- `apktool b` 重编译 `smali_classes2` 报 `Unsigned short value out of range: 65536`(写 `Lt5/b;->values()` 时)。实测 dex 头部:官方 1.0.6 `classes2.dex` method_ids = **65,524**(上限 65,536),A 段钩子(ASR 三处、onPostResume、事件桥)用掉 10 个 → 65,534;上游 OTA 钩子体(队列 4 个引用 + 文件 4 个 + 事件 3 个)放不下。`classes.dex` 65,345、`classes3.dex` 65,449 同样贴顶;`classes4.dex` 只有 11,158。
+- 处理:①`OtaGates.java` 把三段策略收成 `queue/file/event` 三个静态方法,smali 每处只剩 1 个新引用(事件桥留在 classes2,用掉 1 个);②队列类 `LX3/U;` 与发送类 `LX3/u;`(含其钩子新方法 `turboioOriginal_o/u`)由 `package.mjs` 搬进新建的 `smali_classes5`,apktool 编成 `classes5.dex`(实测只含这两个类,299 个方法引用),插件 dex 顺延为 `classes6.dex`;原厂 classes3/4 原件不动。内部类 `U$a/b/c`、`u$a` 留在 classes2,跨 dex 按名解析(多 dex 自 API 21 起原生支持)。
+- 结果:`classes2.dex` 65,518(反而更宽)、`classes5.dex` 299、`classes6.dex` 3,338。`verify_apk` 加 `--relocated classes5.dex` 显式声明,未声明仍按「插件槽位冲突」报错。
+- 这是**手机端静态事实**,运行时(宿主能否正常加载搬走的类、钩子是否生效)属 C 段装机验收;A 段 r2 包无此改动。

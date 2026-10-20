@@ -13,14 +13,15 @@
   仪表盘和小应用走 Server/ZIP,模型在 App 里自己配。只有需要改手机端行为时才进入第二阶段(重编译、自签名,见下)。
 - **2026-10-18 Bill 定:自己做 Android 版「新固件插件」,分 A/B/C 三段推进,先做 A 段**(宿主适配到 Bill 手机现用的官方 APK 版本,不刷机;
   B 段把 OTA 门禁换成 TMIG1;C 段 Bill 亲手实刷)。段落定义与进度见 TODO.md。逆向分析用 REA(morluto/rea),**只配项目级 `.mcp.json`,不配全局**。
+- **2026-10-19 Bill 定:A 段验收完成后直接做 B/C 段**。同日查清两件事并记入 TODO:①原厂固件的仪表盘股票组件可改源喂期货(S 段,1 分钟刷新、最多 6 项),②tick 级行情不靠固件、靠原厂 business 19 文字通道(盯盘模式);两者都列为可选,排在 B/C 之后。
 
 ## 硬约束
 
 - **刷机、安装 APK、卸载官方 App、改蓝牙绑定:只有 Bill 亲手做**。Claude 只准备文件、校验 SHA-256、给出逐步说明,
   不替他点「开始安装」。上游每一步的停止条件(版本/SHA/门禁不匹配就停,不改白名单硬上)照抄,不绕。
-- **版本锁死**:宿主 RayNeo AI **1.0.5(201)**、眼镜 Strix OS **1.0.4.12**、固件 **TAP1-TEST-01**、APK **GUARD-07-PUBLIC**。
-  动手前先核对眼镜与 App 当前版本;不匹配就停,不拿别的候选凑。
-- **⚠️ 2026-10-18 实际核对:Bill 的眼镜已是 Strix OS 1.0.5.5,刷机暂停**。上游 Android 路线(GUARD-07 + TAP1-TEST-01)只适配 1.0.4.12;1.0.5.5 的适配 TMIG1 只有 iOS 1.0.6 插件,上游明说「没有发布 Android 1.0.6 APK,也没验证旧 Android APK 与新固件的全量兼容」,旧 Android 门禁不能刷 TMIG1。**不降级**:1.0.5.5 多了 bt_controller 负载,往回刷 1.0.4.12 底座没人验证过,上游也不保证回退。等上游出 Android 版 TMIG1(关注 upstream 提交与 Release),或改走 iOS。眼镜端功能(仪表盘/小应用/新菜单)因此全部挂起;手机侧功能照常推进。
+- **版本锁死(2026-10-19 B 段起)**:宿主 RayNeo AI **1.0.6(216)**(Bill 手机现装官方版,`4c1c57ae…6206`)、眼镜 Strix OS **1.0.5.5**、固件 **TMIG1**(上游 iOS 实刷原样 ZIP,SHA `f1d3616c…`)、插件 = bill 分支自签 **guarded** 包(`package-official-ota-preparation.py --guarded` 产出,标记 `assets/turboio/official-ota-guarded.txt`)。
+  动手前先核对眼镜与 App 当前版本;不匹配就停,不拿别的候选凑。上游旧组合(1.0.5(201) / 1.0.4.12 / TAP1-TEST-01 / GUARD-07-PUBLIC)在本仓库只作历史参照。
+- **历史:2026-10-18 核对眼镜为 Strix OS 1.0.5.5,刷机曾暂停**。上游 Android 路线(GUARD-07 + TAP1-TEST-01)只适配 1.0.4.12;TMIG1 只有 iOS 1.0.6 插件实刷过,上游明说「没有发布 Android 1.0.6 APK,也没验证旧 Android APK 与新固件的全量兼容」。**不降级**:1.0.5.5 多了 bt_controller 负载,往回刷 1.0.4.12 底座没人验证过。2026-10-19 Bill 定:不等上游,自己把 Android 插件的 OTA 链路换成 TMIG1(B 段),Android 投递 TMIG1 为首次、无回滚保证。
 - **密钥不进仓库**:模型 Key、地图 Key、签名 keystore、Server token 一律放 `local/`(gitignored)或手机 App 内填写;
   不发进聊天、不写进 commit、不写进日志。上游 .gitignore 已挡 *.apk/*.keystore/*.key/.env,`local/` 另加。
 - **上游代码不直接改**:自己的东西放 `custom/`;必须改上游文件时在分支 `bill` 上改并在本文记录,方便 `git merge upstream/main`。
@@ -31,6 +32,7 @@
 - `android-addon/host-profiles.mjs`、`package.mjs`、`assemble_apk.py`、`verify_apk.py`、`tests/{HostProfilesTest.mjs,ApkAssemblyTest.py,otaflow/NavReflect.java}`:1.0.6 宿主 profile、`ota:false`、DEX 空闲槽位、显式描述符表(2026-10-18,A3 + 审查修复)
 - `android-addon/src/com/turboio/addon/{NavReflect,TurboAddon,OtaController,OtaUI}.java`:按 versionCode 懒加载反射名表、install fail closed、`otaGatesInstalled()` 三处 OTA 门禁(2026-10-18)
 - `android-addon/src/com/turboio/addon/EditorialUI.java`:「设置」标签加两个按钮调 `RecordingExports.show`;上游新首页没接这个页面,旧 `showLegacyHome` 是死代码(2026-10-19)
+- **B 段(2026-10-19)**:`android-addon/src/com/turboio/addon/{OtaPackage,OfficialOtaBridge,OfficialOtaPreparation,OfficialOtaGate,OfficialOtaFeed,OtaSession,OtaController,OtaUI}.java`:固件钉值、目录名、口令、官方查询版本号全部由 TAP1/1.0.4.12 换成 TMIG1/1.0.5.5,流程代码不动;`NavReflect.otaGatesInstalled()` 改为「guarded 标记资产存在 或 versionCode 201」;`official-ota-source.mjs`、`package-official-ota-preparation.py`、`tests/OfficialOtaSourceTest.mjs` 重钉到 1.0.6 libapp.so(`e9ab4326…`,偏移 `0x885c9a`/`0xe1ffc`);`ota-hooks.mjs` 按宿主名表生成(`tests/OtaHooksTest.mjs` 两套名表);`host-profiles.mjs` 1.0.6 `ota:true` + `relocate`(X3/U、X3/u 搬进 `smali_classes5`,`relocateClasses()`);`package.mjs` 传名表、先搬类再包钩子、给 assemble/verify 传 `--relocated classes5.dex`;**新文件 `src/com/turboio/addon/OtaGates.java`**(三段门禁各收成一个静态调用,策略顺序照抄上游 smali);`assemble_apk.py`/`verify_apk.py` 只在显式声明时接受 apktool 多出的 classesN.dex(未声明仍报冲突),`tests/ApkAssemblyTest.py` 加用例;`package-official-ota-preparation.py` 自动识别 relocated dex;`verify_apk.py --guarded` 档位(放行且只放行钉死文本的 guarded 标记文件与补丁后 SHA `96cc9a9f…` 的 libapp.so,guarded 包校验有明确的 exit 0;钉值与 preparation 脚本一致由 `ApkAssemblyTest` 断言);`build.sh` `OTA_CANDIDATE` 可覆盖、默认 TMIG1;OTA 相关 Java 测试钉值同步。**原因:官方 1.0.6 classes2.dex 方法引用 65,524,上限 65,536,上游钩子体放不下**(见 `custom/docs/HOST_1.0.6.md`「B 段」)
 - `.gitignore`:加 `local/`、`/.mcp.json`
 
 ## 目录约定
@@ -38,11 +40,13 @@
 - `custom/` — Bill 自己的功能代码与配置模板(进 git)
   - `custom/dashboard/` — futures-kb / futures-lhb → 仪表盘卡片 / App ZIP 的数据映射脚本(调上游 `dashboard-service` 的 SDK)
   - `custom/notify/` — 飞书/知识库消息 → 眼镜的桥
+  - `custom/glasses-gateway/` — **眼镜问答网关（2026-10-19）**：挡在 Hermes API 前的本机 HTTP 服务（8650，纯标准库 `gateway.py`），Tailscale serve 指向它。行情类问题（含 行情/多少钱/现价/报价/价格/盘面/自选 且不含 为什么/分析/怎么看 等）不经 LLM，直接读 futures-kb `kb quotes --json` 的 20 秒缓存，SSE 流式 1 秒内回；其余请求原样转发 127.0.0.1:8642。原因：Hermes 调工具时首个可见字 11 秒才到，眼镜回答区早已关闭（1.7 秒的普通问答正常）。LaunchAgent 模板 `com.dyb.turboio-gateway.plist`，日志 `local/logs/gateway.log`
   - `custom/docs/` — 自己整理的操作文档:`FLASH_GUIDE.md`(刷机准备、vivo X Fold 5 专项、四步、停止条件、实刷记录表)
   - `custom/README.md` — 每个子目录做什么、怎么跑、验收到哪一步
 - `local/` — 不进 git:`downloads/`(APK、固件、SHA)、`tokens/`(dashboard-service 签发的 token)、`config/`(Key 的本机副本)、
   `tools/`(apktool 3.0.3 jar+启动器、REA 用的 jadx-headless-mcp 0.7.1 jar)、`android-sdk/`(platform-tools、platforms/android-36、build-tools/36.0.0,
   用 Google cmdline-tools 装的项目内 SDK,`_dl/` 是下载缓存)。**Android 工具链全部装在这里,不装全局**(2026-10-18 定)。
+- `custom/scripts/sign_guarded.sh` — C0 签名脚本,Bill 在自己终端跑(apksigner 交互要口令,口令不进聊天):SHA 核对 → zipalign → v3 签名 → 证书指纹必须不变 → `verify_apk --guarded` → SHA 记 SUMS。
 - `custom/scripts/env.sh` — `source` 后 JAVA_HOME(Homebrew openjdk@17)、ANDROID_SDK_ROOT、PATH(adb/apksigner/zipalign/apktool)、REA_* 全部指向上面;
   跑 `android-addon/build.sh`、adb、apktool 前先 source。
 - `.mcp.json`(项目根,gitignored,含本机绝对路径)— REA 的 MCP 注册:`npx -y rea-agents@6.7.0 mcp`,env 给 JAVA_HOME / REA_JADX_MCP_JAR /

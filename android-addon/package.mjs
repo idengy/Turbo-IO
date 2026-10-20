@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import {execFileSync} from 'node:child_process';
-import {profileFor,verifyHost} from './host-profiles.mjs';
+import {profileFor,verifyHost,relocateClasses} from './host-profiles.mjs';
 import {queueHook,fileHook,EVENT_GUARD} from './ota-hooks.mjs';
 
 const root=path.dirname(new URL(import.meta.url).pathname);
@@ -15,10 +15,13 @@ const profile=profileFor(sha),host=path.join(root,'build',profile.directory);
 if(profile.version!=='1.0.5'&&profile.version!=='1.0.6')throw new Error('Unsigned builder supports pinned 1.0.5 (201) and 1.0.6 (216); use the prior builder for 1.0.4');
 if(!fs.existsSync(host)) execFileSync('apktool',['d','--no-res','--output',host,source],{stdio:'inherit'});
 // No writes until every required callback/transport descriptor has been checked.
+verifyHost(host,profile);
+// bill branch: DEX 64K budget — move the OTA queue/sender classes to their own dex before wrapping them.
+const relocated=relocateClasses(host,profile);
 const abi=verifyHost(host,profile);
-// A-segment 1.0.6: profile.ota=false, so the 1.0.5-pinned queue/file gates are never installed.
+// profile.ota=false skips the queue/file gates entirely (A-segment builds); otherwise they are generated from the host's descriptor table.
 const ota=abi.ota&&profile.ota!==false?abi.ota:null;
-if(ota){fs.writeFileSync(ota.queue,queueHook(fs.readFileSync(ota.queue,'utf8')));fs.writeFileSync(ota.sender,fileHook(fs.readFileSync(ota.sender,'utf8')));}
+if(ota){fs.writeFileSync(ota.queue,queueHook(fs.readFileSync(ota.queue,'utf8'),abi.names));fs.writeFileSync(ota.sender,fileHook(fs.readFileSync(ota.sender,'utf8'),abi.names));}
 
 function wrap(file,name,signature,args,returnMode) {
   let text=fs.readFileSync(file,'utf8');
@@ -80,12 +83,14 @@ const output=path.join(root,'build/TurboIO-RayNeo-'+profile.version+'-unsigned.a
 const assembled=path.join(root,'build/TurboIO-RayNeo-'+profile.version+'-assembled.apk');
 execFileSync('apktool',['b',host,'-o',assembled],{stdio:'inherit'});
 const dex=path.join(root,'build/dex/classes.dex');
-execFileSync('python3',[path.join(root,'assemble_apk.py'),source,assembled,dex,output,'--public-assets'],{stdio:'inherit'});
-execFileSync('python3',[path.join(root,'verify_apk.py'),source,output,'--public-assets'],{stdio:'inherit'});
+const relocatedDex=relocated.length?['--relocated',profile.relocate.dex.replace('smali_','')+'.dex']:[];
+execFileSync('python3',[path.join(root,'assemble_apk.py'),source,assembled,dex,output,...relocatedDex,'--public-assets'],{stdio:'inherit'});
+execFileSync('python3',[path.join(root,'verify_apk.py'),source,output,...relocatedDex,'--public-assets'],{stdio:'inherit'});
 const report={sourceSha256:sha,sourceVersion:profile.version+' ('+profile.code+')',originalSignaturePreserved:false,
   changes:['ASR observer','NLP/complete guards','onPostResume native entry',
     ota?'bounded event observer; exclusive business9 before-vendor interception':'bounded event observer (no business9 before-vendor guard)',
-    ota?'version-pinned OTA queue and file gates':'no OTA adapter installed (A-segment: official OTA offsets remain 1.0.5-only)',
+    ota?'version-pinned OTA queue and file gates (descriptors from host profile '+profile.version+'; one OtaGates call per hook)':'no OTA adapter installed (profile.ota=false)',
+    ...(relocated.length?['host classes relocated to '+profile.relocate.dex+' (DEX method-id budget): '+relocated.map(r=>r.descriptor).join(' ')]:[]),
     'addon DEX in the next free classesN.dex slot','allowlisted public editorial assets and 20 SDK gallery ZIPs','TTS visibility; non-exported task and dedicated OTA foreground services'],
   credentialsBundled:false,outputSha256:crypto.createHash('sha256').update(fs.readFileSync(output)).digest('hex'),
   installed:false,nonRootValidated:false};

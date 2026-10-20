@@ -8,6 +8,7 @@ final class NavReflect {
     // host's obfuscated names (1.0.6 relocation evidence: custom/docs/HOST_1.0.6.md).
     private static String sender="E3.u",message="E3.Q",business="P3.h",priority="E3.b",core="Q3.q",result="P3.A",send="u",sendFile="v";
     private static int selected; // host versionCode once mapped; 0 = not mapped yet
+    private static boolean guarded; // assets/turboio/official-ota-guarded.txt present (package-official-ota-preparation.py --guarded)
     static synchronized void select(int versionCode)throws Exception{
         if(versionCode==216){sender="X3.u";message="X3.Q";business="i4.h";priority="X3.b";core="j4.q";result="i4.A";send="t";sendFile="u";}
         else if(versionCode==201){sender="E3.u";message="E3.Q";business="P3.h";priority="E3.b";core="Q3.q";result="P3.A";send="u";sendFile="v";}
@@ -23,9 +24,11 @@ final class NavReflect {
         if(!(c instanceof android.content.Context))throw new IllegalStateException("Host application unavailable");
         android.content.Context app=((android.content.Context)c).getApplicationContext();
         select(app.getPackageManager().getPackageInfo(app.getPackageName(),0).versionCode);
+        try{String[] files=app.getAssets().list("turboio");guarded=files!=null&&java.util.Arrays.asList(files).contains("official-ota-guarded.txt");}catch(Exception e){guarded=false;}
     }
-    /** True only on the host whose smali OTA queue/file gates package.mjs installs (1.0.5 (201)); 1.0.6 is built with profile.ota=false. */
-    static boolean otaGatesInstalled(){try{ensure();}catch(Exception e){return false;}return selected==201;}
+    /** True when this package may drive OTA: upstream 1.0.5 (201) builds always carry the smali queue/file gates; on 1.0.6
+     * only the guarded package (route-patched libapp.so + marker asset) does. A plain 1.0.6 package stays disabled (A-segment). */
+    static boolean otaGatesInstalled(){try{ensure();}catch(Exception e){return false;}return selected==201||guarded;}
     private static String host(String name)throws Exception{
         ensure();
         if(name.equals("E3.u"))return sender;

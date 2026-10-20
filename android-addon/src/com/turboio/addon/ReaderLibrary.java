@@ -42,5 +42,10 @@ final class ReaderLibrary {
  }
  static void cancelWeb(){generation++;webBusy=false;lines=Collections.emptyList();}
  static void stop(){cancelWeb();loading=false;ReaderBridge.close();}
+ // bill 分支 r17(2026-10-21,书架管理窗口 ReaderShelfUI):调顺序 / 删除;改完重编 token(眼镜按 token 认书)并保存;返回 null = 成功,否则是给用户看的原因。
+ private static String editable(){if(loading||webBusy)return "正在同步或处理封面，稍后再改";if(ReaderBridge.active())return "阅读进行中，请先「退出眼镜阅读」";return null;}
+ private static void renumber(){for(int i=0;i<books.size();i++)books.get(i).token=i+1;if(first>Math.max(0,(books.size()-1)/4*4))first=Math.max(0,(books.size()-1)/4*4);}
+ static String move(ReaderCodec.Book b,int delta){String why=editable();if(why!=null)return why;int i=books.indexOf(b);if(i<0)return "这本书已不在书架";int j=Math.max(0,Math.min(books.size()-1,i+delta));if(j==i)return null;books.remove(i);books.add(j,b);renumber();try{save();}catch(Exception e){return "书架保存失败";}note="顺序已改，重新「发送四本书架到眼镜」后生效";return null;}
+ static String remove(ReaderCodec.Book b){String why=editable();if(why!=null)return why;if(!books.remove(b))return "这本书已不在书架";File f=contentFile(b);if(f.isFile()&&!f.delete())f.deleteOnExit();if(selected==b){selected=null;lines=Collections.emptyList();}renumber();try{save();}catch(Exception e){return "书架保存失败";}note="已删除「"+b.title+"」";return null;}
  private static void event(ReaderCodec.Reply r){if(r.event==1){cancelWeb();if(r.sid==0){note="眼镜请求书架；请在手机点击发送确认本次阅读";return;}send((int)r.value);}else if(r.event==2){for(ReaderCodec.Book b:books)if(b.token==r.value){lines=Collections.emptyList();read(b,0);break;}}else if(r.event==3&&selected!=null&&r.token==selected.token){automatic=r.automatic;speed=r.speed>=30&&r.speed<=480?r.speed:speed;read(selected,(int)r.value);}else if(r.event==4)cancelWeb();}
 }

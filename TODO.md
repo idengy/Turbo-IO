@@ -26,7 +26,7 @@
   - [x] C1 第二轮打包 2026-10-19:libapp 补丁重生成到 `local/work/host-106-libapp-patched/`(SHA `96cc9a9f…` 一致);B7 产物改名 `*.b7-20261019` 留档;`package.mjs` exit 0(unsigned r2 `9406b7c8…`)→ `--guarded` exit 0 → **guarded-unsigned r2 `e2a4b24b…`**,verify `--guarded` exit 0、unexpected 空、guarded 两项 true;包内 classes6.dex == 修复后 dex `d483eb72…`,含两条钉值字符串。`sign_guarded.sh` 钉值改 r2,旧签名包自动改名留档
   - [x] C1 第二轮签名+装机 2026-10-20 08:51(手机时钟):Bill `sign_guarded.sh` 5/5 → 签名包 r2 **`27010e75…7179`**(SUMS 已记,指纹不变)→ `adb install -r` 成功,手机 base.apk 哈希一致
   - [x] C1 第二轮验收 2026-10-20(Bill 确认):升级页首行 `ANDROID-106 · OFFICIAL-OTA-GUARD-01 · TMIG1` ✅;眼镜语音提问正常 ✅(中间 502 是 Mac 网关没在跑,与新包无关,已装 LaunchAgent 根治)。**C1 通过:guarded r2 在手机上跑通,官方蓝牙收发未受搬类影响**
-- [ ] C2 15 分钟只下载 → 官方更新说明出现 TMIG1 GUARDED → 下载到软件就绪不安装
+- [x] C2 2026-10-20 09:10(手机时钟)通过:只下载来源开放后,官方「眼镜软件版本」页显示 Strix OS 1.0.5.5 · 8.4M,说明文字是插件 Feed 生成的「TMIG1 experimental firmware (Strix OS 1.0.5.5 base). AP-only; requires separate one-time authorization…」(官方 UI 只显示 description,不显示任务名 TMIG1 GUARDED,FLASH_GUIDE 第 3 条按此修正),下载解压到「新软件版本已准备就绪」弹窗,Bill 选「稍后再说」未安装;自动更新开关已关
   - [x] 2026-10-20 准备:TMIG1 ZIP 已 `adb push` 到手机 `/sdcard/Download/StrixOS-1.0.5.5-TurboIO-TMIG1-CANDIDATE-NOT-APPROVED.zip`,手机端 sha256sum `f1d3616c…` 与本机一致;手机电量 98% 充电中。眼镜电量 ≥50% 由 Bill 目视确认
 - [ ] C3 只读预检「官方目录 16/16」三项 true(目录名 `Strix_OS_1.0.5.5` 是推断,不通过就停、导状态文件回 B 段)→ 输入 TMIG1 授权 → 两分钟内官方页开始安装一次
 - [ ] C4 自然重启 → TMIG1 新菜单 → 只读回查 → 解除结果保护 → LOCKED/授权 0;填记录表

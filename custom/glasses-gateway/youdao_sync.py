@@ -2,7 +2,7 @@
 """有道单词本同步(2026-10-20):把 Bill 的有道词典单词本拉成 `local/words/wordbook.json`,供网关 words.py 排版上镜。
 
 两种输入:
-  1) 网页版接口(默认):读 `local/config/youdao-cookie.txt`(Chrome 登录 dict.youdao.com/wordbook 后,DevTools → Network →
+  1) 网页版接口(默认):读 `local/config/youdao-cookie.txt`(Chrome 登录 dict.youdao.com/wordbook/wordlist 后(注意 /wordbook/ 本身是 404),DevTools → Network →
      任意 webapi/words 请求 → Request Headers 的 Cookie 整行值,一行存文件),分页 GET /wordbook/webapi/books、/words。
   2) `--xml 有道导出.xml`:有道 PC 版「单词本 → 导出」的 XML(<item><word><trans><phonetic>)。
 原始响应落 `local/words/raw/<时间>.json` 方便核对字段;Cookie 失效(有 code!=0 或 total=0 且列表空)报错退出 2,**不覆盖**旧词库。
@@ -30,7 +30,7 @@ UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML,
 
 def _get(path: str, cookie: str, **params) -> dict:
     url = f"{BASE}/{path}" + ("?" + urllib.parse.urlencode(params) if params else "")
-    req = urllib.request.Request(url, headers={"Cookie": cookie, "User-Agent": UA, "Referer": "https://dict.youdao.com/wordbook/", "Accept": "application/json"})
+    req = urllib.request.Request(url, headers={"Cookie": cookie, "User-Agent": UA, "Referer": "https://dict.youdao.com/wordbook/wordlist", "Accept": "application/json"})
     with urllib.request.urlopen(req, timeout=30) as r:
         body = r.read().decode("utf-8", "replace")
     try:
@@ -135,7 +135,7 @@ def main(argv=None) -> int:
         try:
             cookie = a.cookie.read_text(encoding="utf-8").strip().splitlines()[0].strip()
         except (FileNotFoundError, IndexError):
-            print(f"缺少 Cookie 文件 {a.cookie}:Chrome 登录 https://dict.youdao.com/wordbook 后,DevTools → Network → 任意 webapi/words 请求 → "
+            print(f"缺少 Cookie 文件 {a.cookie}:Chrome 登录 https://dict.youdao.com/wordbook/wordlist 后,DevTools → Network → 任意 webapi/words 请求 → "
                   "Request Headers → Cookie 整行值,存成一行", file=sys.stderr); return 2
         cookie = cookie[len("Cookie:"):].strip() if cookie.lower().startswith("cookie:") else cookie
         try:

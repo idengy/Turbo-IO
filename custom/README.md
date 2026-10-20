@@ -17,7 +17,7 @@ Bill 自己的功能代码与文档。子目录约定见根 CLAUDE.md「目录�
 
 有道词典单词本 → 眼镜业务 19 文字面板循环显示「单词 / 音标 / 释义」，**不出声**。排版、节奏、顺序、词库全部在网关（改了即生效），插件只把盯盘的 SSE→面板壳换一个流地址（`WatchController.task`）。
 
-**1. 拿到单词本（Bill 亲手，一次）**：Chrome 登录 https://dict.youdao.com/wordbook → 按 F12 打开 DevTools → Network 标签 → 刷新页面 → 点任意一条名字含 `webapi/words` 的请求 → 右侧 Headers → Request Headers → 找到 `Cookie:` 一行，复制冒号后面整段 → 存成 `local/config/youdao-cookie.txt`（一行，gitignored；不要贴进聊天）。
+**1. 拿到单词本（Bill 亲手，一次）**：Chrome 登录 https://dict.youdao.com/wordbook/wordlist （`/wordbook/` 本身是 404，2026-10-20 实测）→ 按 F12 打开 DevTools → Network 标签 → 刷新页面 → 点任意一条名字含 `webapi/words` 的请求 → 右侧 Headers → Request Headers → 找到 `Cookie:` 一行，复制冒号后面整段 → 存成 `local/config/youdao-cookie.txt`（一行，gitignored；不要贴进聊天）。
 备选：有道 PC 版「单词本 → 导出」得到 XML，用 `--xml 文件` 读。
 
 **2. 同步**：`python3 custom/glasses-gateway/youdao_sync.py`（或 `--xml 导出.xml`）→ 写 `local/words/wordbook.json`，原始响应落 `local/words/raw/<时间>.json`。打印「写入 … N 词；单词本 {…}；无音标 M 词」，N 应等于有道网页端的总数。Cookie 过期时报「接口返回 0 条」退出 2，**不覆盖**旧词库——重新复制 Cookie 再跑。网关按文件 mtime 热重载，同步后不用重启。

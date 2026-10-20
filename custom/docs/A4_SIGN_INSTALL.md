@@ -1,6 +1,6 @@
 # A4 自签名与装机操作清单(2026-10-18)
 
-> **历史文档(2026-10-20 注)**:对象是 A 段的 `unsigned.apk`。B 段起一律签 **guarded** 包,流程固化为 `bash custom/scripts/sign_guarded.sh`(SHA 核对 → zipalign → v3 签名 → 证书指纹不变 → `verify_apk --guarded` → SHA 记 SUMS),见 CLAUDE.md「目录约定」。本文保留 keystore 生成、停止条件、回退步骤作参照;第 0 节的 SHA 钉值已过期。
+> **历史文档(2026-10-20 注)**:对象是 A 段的 `unsigned.apk`。B 段起一律签 **guarded** 包,流程固化为 `bash custom/scripts/sign_guarded.sh`(SHA 核对 → zipalign → v3 签名 → 证书指纹不变 → `verify_apk --guarded` → SHA 记 SUMS),见 CLAUDE.md「目录约定」。本文保留 keystore 生成、停止条件、回退步骤作参照;第 0 节的 SHA 钉值已过期。 **装机命令一律 `adb install -r --no-incremental`(2026-10-20 r12:默认增量安装被 vivo 记成全新安装,设置全丢、桌面图标消失)。**
 
 对象:`android-addon/build/TurboIO-RayNeo-1.0.6-unsigned.apk`(SHA-256 `3139e8a3dd4df565ae7ac6ab8ba3b0ecb0ba80877663016668f78fd6453b6d6e`,审查修复后版本;旧 `56cbe200…` 作废不许签)。
 分工:**Claude 只做 0、2、3 中的校验;1 的口令、5 的卸载/安装、6 的手机操作全部 Bill 亲手。** 任一停止条件命中就停,不绕。

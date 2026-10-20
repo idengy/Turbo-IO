@@ -138,3 +138,13 @@
 
 顺带澄清:首页底部 `ANDROID 1.0.5 · INTEGRATION-08 / CALLBACK-01` 是上游 `EditorialUI` 写死的文案,任何版本都显示,不是判断装没装对的依据;guarded 标识只出现在升级页首行(`OfficialOtaBridge.status()`)。
 
+## 语音助手多轮与收尾链路(2026-10-20,盯盘本地指令「语音框不关」排障结论)
+
+对象:官方 1.0.6(216)宿主 smali(`local/work/host-106/`)。起因:插件本地指令(「开始盯盘」)回灌终态后,眼镜语音框仍等下一句。
+
+- **谁决定开下一轮**:云端 NLP 原响应的 `NlpResult.hasNextRound`(拦截器 `l8/L0` 还会对 navigate/task/calendar 置 true)→ `Dc/f`(AskAiFlutterBridge)把原件 `hasNextRound` 放进给 Flutter 的 map → Flutter 经方法通道 `s8/b`「assistantControllerStartNextRound」→ `AssistantController.startNextRound()`(native)开下一轮拾音。**插件 hook 的是 `p8/c$c`(AiResultListener)收到的对象,改模板副本的 `setHasNextRound(false)` 到不了 Flutter**(r8 无效的原因)。`strings libapp.so` 里没有 hasNextRound 字串,但 Flutter 侧确实在用,别再以字串缺失推断。
+- **单次终态被认可**:对照实验(「测试回复」模式接管闲聊问题)语音框自己关,说明插件回灌 finished=true + onResponseComplete 的收尾本身没问题;差别只在官方原件 next=true。
+- **宿主自己的收尾入口**:`p8/c.s(String reason, boolean phoneExit, boolean special)` = `stop_assistant`:`l8/M0.a("stop_assistant")` → `p()`/`b()` → `AssistantController.stopWorkflow(config)`;`phoneExit && !p.invoke()` 时 `rayneo_venus_sdk_plugin/e.l(e,1,"stop_assistant",6)` 给眼镜发 `phone_exit`(关语音框);reason==null 时 `q("stop_assistant_completed",false)` 复位 `z`(助手活动标志)。调用方:Flutter「stopAssistantInternal」经 `l8/i.1` 的 Function3 → `s(reason,phoneExit,special)`;官方「退出」意图在 `p8/c$c.onNlpResult` 末尾(intent ∈ {exit,quit,…} 或 domain system_ctrl,且 `z`)调 `t(this,false,null,6)` = `s(null,false,false)`,不发 phone_exit。
+- **插件用法(r11)**:`TurboAddon.localFinal` 终态后,若官方原件 next=true,800 ms 后反射调 `s(null,true,false)`;外层 `p8/c` 实例从监听器内部类字段取(`p8/c$c.a`,按「字段类型有 s(String,Z,Z)」找,不钉字段名)。实机:语音框 2–3 s 关、业务 19 面板不受 phone_exit 影响。
+- **其他可复用事实**:`p8/c$c.onNlpResult` 把 NlpResult 包成 `SkillPayloadTransportPayload` 发眼镜(sub 为 llm/rayclaw 或含 chat 走 `l8/M0.c` 合并路径,否则 `rayneo_venus_sdk_plugin/e.m` 即时路径);`finished && !r8/a.g()` 记「无扬声器链路以NLP final作为完成信号」只置标志;`onResponseComplete` 只对 RayClaw 链路发 0x0C;`onVadStatusChange`「VAD超时,发送 timeout exit」。宿主 `VA_TRACE` 日志(`l8/Y0.d`)不进 logcat。
+

@@ -57,6 +57,34 @@ final class RecordingExports {
             if((text?document:audio) && !name.startsWith("turboio-")) out.add(node);  // 跳过本页分享时自己拷到 cache/share_plus 的副本
         }
     }
+    /** bill 分支临时诊断(2026-10-21,定位 1.0.6 语音备忘存放处,找到后删):列出私有 dataDir 与外部 Android/data/<包> 里
+     *  最近 1 小时修改过的全部文件(不看扩展名,含 databases),只显示相对路径/大小/时间,不读内容、不提供分享。 */
+    static void recent(Activity activity) {
+        Toast.makeText(activity,"正在列出最近 1 小时变动的文件",Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            File data = new File(activity.getApplicationInfo().dataDir), external = activity.getExternalFilesDir(null);
+            File externalRoot = external == null ? null : external.getParentFile();
+            long since = System.currentTimeMillis() - 3600_000L; List<File> files = new ArrayList<>(); int[] budget = {60000};
+            for(File root : new File[]{data, externalRoot}) walk(root, 0, since, files, budget);
+            files.sort((a,b)->Long.compare(b.lastModified(),a.lastModified()));
+            SimpleDateFormat format = new SimpleDateFormat("HH:mm:ss",Locale.ROOT);
+            StringBuilder b = new StringBuilder(files.isEmpty() ? "最近 1 小时没有文件变动" : "共 " + files.size() + " 个(新的在上,最多 150 个)\n");
+            for(int i=0;i<Math.min(150,files.size());i++){File f=files.get(i);b.append('\n').append(format.format(new Date(f.lastModified()))).append("  ").append(f.length()/1024).append(" KB  ").append(relative(f.getParentFile(),data,externalRoot)).append('/').append(f.getName());}
+            final String text = b.toString();
+            MAIN.post(() -> { if(activity.isFinishing()) return;
+                android.widget.TextView t = new android.widget.TextView(activity); t.setText(text); t.setTextIsSelectable(true); t.setTextSize(12); t.setPadding(32,16,32,16);
+                android.widget.ScrollView sv = new android.widget.ScrollView(activity); sv.addView(t);
+                new AlertDialog.Builder(activity).setTitle("最近 1 小时变动的文件").setView(sv)
+                    .setNeutralButton("复制", (d,w) -> { ((android.content.ClipboardManager)activity.getSystemService(android.content.Context.CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("Turbo IO 文件变动", text)); Toast.makeText(activity,"已复制",Toast.LENGTH_SHORT).show(); })
+                    .setPositiveButton("关闭", null).show(); });
+        },"TurboIO-recent-files").start();
+    }
+    private static void walk(File node,int depth,long since,List<File> out,int[] budget){
+        if(node==null||depth>14||budget[0]--<=0||out.size()>=2000)return;
+        try{if(!node.getAbsolutePath().equals(node.getCanonicalPath()))return;}catch(IOException e){return;}
+        if(node.isDirectory()){String n=node.getName();if(n.equals("flutter_assets")||n.equals("code_cache")||n.equals("lib"))return;File[] c=node.listFiles();if(c!=null)for(File x:c)walk(x,depth+1,since,out,budget);}
+        else if(node.isFile()&&node.lastModified()>=since)out.add(node);
+    }
     /** 所在目录相对私有数据目录(data/…)或外部目录(ext/…)的路径,列表里定位录音用。 */
     private static String relative(File dir,File data,File external){
         String d=dir==null?"":dir.getAbsolutePath();

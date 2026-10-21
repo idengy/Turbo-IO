@@ -219,6 +219,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def _json(self, status: int, obj: dict):
         payload = json.dumps(obj, ensure_ascii=False).encode()
+        if status >= 400:  # 2026-10-21:鉴权失败等原来不留痕,手机端「连接中」时查不到原因
+            log.warning("%s %s -> %d (auth header %s)", self.command, urlsplit(self.path).path, status, "present" if self.headers.get("Authorization") else "missing")
         self.send_response(status); self.send_header("Content-Type", "application/json"); self.send_header("Content-Length", str(len(payload)))
         self.end_headers(); self.wfile.write(payload)
 

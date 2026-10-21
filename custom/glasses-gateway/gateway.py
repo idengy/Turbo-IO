@@ -277,7 +277,7 @@ class Handler(BaseHTTPRequestHandler):
         pending: list[tuple[str, int, int]] = []  # (text, index, total)
         commit: dict | None = None  # 当前词的游标改动,第一帧送出后提交
         replay = not probe
-        back_steps = 0  # >0 = 正在回看第几个之前的词;停手 BACK_PAUSE 秒后归 0、接着放新词
+        back_steps = 0  # >0 = 正在回看第几个之前的词;停手 BACK_PAUSE 秒后归 0,先重放转旋钮时正在显示的那个词再往后放
         rulers = words.ruler_frames()
         ctl = WordsControl()
         with WordsControl.lock:
@@ -303,6 +303,8 @@ class Handler(BaseHTTPRequestHandler):
                     if probe:
                         pending = [(fr, i + 1, len(rulers)) for i, fr in enumerate(rulers)]
                     else:
+                        if back_steps:  # 回看结束:回看期间不提交游标,current_id 仍是转旋钮时正在显示的词,重放它(2026-10-21 Bill 定)
+                            replay = True
                         back_steps = 0
                         try:
                             with self.deck_lock:

@@ -17,7 +17,7 @@ MAX_LINES = 5
 MAX_CHARS = 384       # NavCore.clip 上限
 MIN_SECONDS, MAX_SECONDS, DEFAULT_SECONDS = 3, 60, 6
 HEARTBEAT = 10.0
-BACK_PAUSE = 15        # 眼镜转旋钮回上一个词后停留秒数,期间再转继续往前退;停手满这么久接着放新词(2026-10-21)
+BACK_PAUSE = 15        # 眼镜转旋钮回上一个词后停留秒数,期间再转继续往前退;停手满这么久先重放转旋钮时那个词再接着放(2026-10-21)
 HISTORY = 50           # 回看最多退几个词
 
 # ---------- 音标字形 ----------

@@ -142,7 +142,7 @@ public final class WatchController {
     }
     private static String begin(String t,String key,String first,String n){
         if(!NavGlasses.startCaption(first))return "无法开启眼镜显示："+NavGlasses.status();
-        task=t;leased=BackgroundWork.acquire(task,16);InboundTrace.mark("开始 "+t);
+        task=t;leased=BackgroundWork.acquire(task,16);
         epoch++;running=true;renewing=false;attempt=0;backs=0;lastData=0;lastText="";sessionStart=SystemClock.elapsedRealtime();note=n;
         final long e=epoch;spawn(e,key);MAIN.removeCallbacks(tick);MAIN.postDelayed(tick,1000);
         return null;
@@ -162,7 +162,7 @@ public final class WatchController {
         return null;
     }
     static void stop(String reason){
-        boolean was=running;running=false;renewing=false;epoch++;MAIN.removeCallbacks(tick);if(was)InboundTrace.mark("停止 "+reason);
+        boolean was=running;running=false;renewing=false;epoch++;MAIN.removeCallbacks(tick);
         final HttpURLConnection c=connection;connection=null;if(c!=null){Thread t=new Thread(c::disconnect,"TurboIO-watch-close");t.setDaemon(true);t.start();}
         if(!mode.isEmpty())mode="";
         if(NavGlasses.active())NavGlasses.closeAuto();

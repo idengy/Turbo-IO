@@ -31,7 +31,6 @@ class NavReflect {
 class OtaController {static boolean busy(){return false;}}
 class EntryProbe {static void event(String kind,Map<?,?> data){}}
 class NavGlasses {static boolean active(){return false;}static void event(String k,Map<?,?> m){}}
-class InboundTrace {static void event(String k,Map<?,?> m){}}
 class NativeNavigation {static boolean active(){return false;}}
 class ReaderBridge {static boolean active(){return false;}}
 class MusicBridge {static boolean active(){return false;}}

@@ -1,6 +1,6 @@
 package com.turboio.addon;
 import android.app.*;import android.os.*;import android.widget.*;import java.util.*;
-/** 期货盯盘页(bill 分支):添加合约(≤12,r10 前 ≤5;超过一屏 = 眼镜滚轮翻 / 轮播)、开始/停止、确认眼镜已回首页、诊断探针。关页不停盯盘(后台继续要在设置里开「后台运行」)。 */
+/** 期货盯盘页(bill 分支):添加合约(≤12,r10 前 ≤5;超过一屏 = 眼镜滚轮翻 / 轮播)、开始/停止、确认眼镜已回首页(诊断探针与开关入口 2026-10-21 r23 移除,WatchController.startTest/startProbe 保留)。关页不停盯盘(后台继续要在设置里开「后台运行」)。 */
 final class WatchUI {
  static void show(Activity a){EditorialUI.Screen s=new EditorialUI.Screen(a,"期货盯盘");LinearLayout b=s.body;
   b.addView(EditorialUI.text(a,"眼镜文字面板显示所选合约的最新价与涨跌幅，约 1 秒一帧；每页 6 行（可调），超过时默认自动轮播翻页。面板会占满眼镜画面，期间音乐/阅读/导航不可用。会话每 55 分钟自动续开。眼镜上长按旋钮退出面板 = 停止（手机随之释放会话，同点「停止」）；想再看就点「开始盯盘」或对眼镜说「开始盯盘」。退后台继续需在设置里开「后台运行」。",14,EditorialUI.MUTED));
@@ -39,27 +39,8 @@ final class WatchUI {
   final TextView[] psz=new TextView[1];
   psz[0]=EditorialUI.button(a,page,"每页 "+WatchController.pageSize()+" 行（点按切换 5 / 6 / 7，首行被挤掉就调小）",false,()->{int cur=WatchController.pageSize();int next=cur<6?6:cur<7?7:5;WatchController.pageSize(next);psz[0].setText("每页 "+next+" 行（点按切换 5 / 6 / 7，首行被挤掉就调小）");});
   secs[0]=EditorialUI.button(a,page,"轮播每页停留 "+WatchController.pageSeconds()+" 秒（点按切换 3 / 5 / 8 / 10）",false,()->{int cur=WatchController.pageSeconds();int next=cur<5?5:cur<8?8:cur<10?10:3;WatchController.pageSeconds(next);secs[0].setText("轮播每页停留 "+next+" 秒（点按切换 3 / 5 / 8 / 10）");});
-  // 诊断
-  LinearLayout diag=EditorialUI.card(a,b);diag.addView(EditorialUI.text(a,"诊断 · 面板探针（固件或 App 升级后复测）",15,EditorialUI.INK));
-  EditorialUI.toggle(a,diag,"字号 1（默认 2，下一次开始生效）",NavGlasses.captionFont==1,(v,on)->NavGlasses.captionFont=on?1:2);
-  final TextView[] lines=new TextView[1];
-  lines[0]=EditorialUI.button(a,diag,"每屏行数 max_lines="+NavGlasses.captionLines+"（默认 8 = 显示 7 行；点按切换 5 / 8 / 10，下一次开始生效）",false,()->{int cur=NavGlasses.captionLines;int next=cur<8?8:cur<10?10:5;NavGlasses.captionLines=next;lines[0].setText("每屏行数 max_lines="+next+"（默认 8 = 显示 7 行；点按切换 5 / 8 / 10，下一次开始生效）");});
-  EditorialUI.toggle(a,diag,"停止前先发一帧空白清屏（若停止后行情仍留在镜片上再开）",NavGlasses.clearBeforeClose,(v,on)->NavGlasses.clearBeforeClose=on);
-  EditorialUI.toggle(a,diag,"语音指令后主动收尾官方助手（官方 next=true 时调 stop_assistant+phone_exit 关语音框；若它把面板也关了就关掉此开关）",TurboAddon.localStop,(v,on)->TurboAddon.localStop=on);
-  EditorialUI.button(a,diag,"盯盘测试 · 合成 5 行行情 3 分钟",false,()->run(a,WatchController.startTest()));
-  EditorialUI.button(a,diag,"宽度探针 · 5 行递增长度",false,()->run(a,WatchController.startProbe("width")));
-  EditorialUI.button(a,diag,"替换/追加探针 · A 帧 4 秒后 B 帧",false,()->run(a,WatchController.startProbe("append")));
-  EditorialUI.button(a,diag,"多行探针 · 12 行编号，每 5 秒更新（试滚轮）",false,()->run(a,WatchController.startProbe("lines")));
-  EditorialUI.button(a,diag,"停止探针",false,()->WatchController.stop("用户停止"));
-  traceButtons(a,diag);
-  Handler h=new Handler();Runnable tick=new Runnable(){public void run(){if(!s.dialog.isShowing())return;state.setText(NavGlasses.connection()+"\n"+NavGlasses.status()+"\n"+WatchController.status()+(WatchController.lastText().isEmpty()?"":"\n— 最近一帧 —\n"+WatchController.lastText())+"\n"+InboundTrace.summary(12));h.postDelayed(this,500);}};h.post(tick);
+  Handler h=new Handler();Runnable tick=new Runnable(){public void run(){if(!s.dialog.isShowing())return;state.setText(NavGlasses.connection()+"\n"+WatchController.status()+(WatchController.lastText().isEmpty()?"":"\n— 最近一帧 —\n"+WatchController.lastText()));h.postDelayed(this,500);}};h.post(tick);
   s.dialog.setOnDismissListener(d->h.removeCallbacks(tick));}
- /** r19 诊断:入站记录复制 / 清空(盯盘页、背单词页共用)。 */
- static void traceButtons(Activity a,LinearLayout card){
-  card.addView(EditorialUI.text(a,"入站记录(r20):会话期间眼镜发来的每个事件带时间记在状态行下方。测法:开始后分别长按、短按、转旋钮,每次隔 5 秒以上,记下按的时间,再点复制发给 Claude。",14,EditorialUI.MUTED));
-  EditorialUI.button(a,card,"复制入站记录",false,()->{((android.content.ClipboardManager)a.getSystemService(android.content.Context.CLIPBOARD_SERVICE)).setPrimaryClip(android.content.ClipData.newPlainText("Turbo IO 入站记录",InboundTrace.dump()));Toast.makeText(a,"已复制",Toast.LENGTH_SHORT).show();});
-  EditorialUI.button(a,card,"清空入站记录",false,InboundTrace::clear);
- }
  private static void run(Activity a,String failure){if(failure!=null)EditorialUI.notice(a,failure);}
  /** 列表行上的小动作按钮(↑ ↓ 移除);disabled 时变灰且不响应。 */
  private static TextView act(Activity a,String label,boolean enabled,android.view.View.OnClickListener l){TextView t=EditorialUI.text(a,label,16,enabled?EditorialUI.LIME:EditorialUI.MUTED);t.setPadding(EditorialUI.dp(a,12),EditorialUI.dp(a,8),EditorialUI.dp(a,8),EditorialUI.dp(a,8));if(enabled)t.setOnClickListener(l);return t;}

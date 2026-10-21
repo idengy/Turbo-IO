@@ -28,6 +28,7 @@ HOST, PORT = "127.0.0.1", int(os.environ.get("GATEWAY_PORT", "8650"))
 HERMES_HOST, HERMES_PORT = "127.0.0.1", int(os.environ.get("HERMES_PORT", "8642"))
 SUIJI_PORT = int(os.environ.get("SUIJI_PORT", "8001"))  # suiji-bot(随记机器人)本机端口,/v1/memo 转发到它的 POST /voice
 MEMO_MAX_BYTES = 2 * 1024 * 1024
+MEMO_DEBUG = Path(__file__).resolve().parents[2] / "local/config/memo-debug"  # 文件存在 = 另存收到的录音到 local/memo-debug/(排查转写,默认关)
 KB_ROOT = Path(os.environ.get("FUTURES_KB_ROOT", "/Users/dyb/PROJECT/futures-kb"))
 KB_PY = KB_ROOT / "venv/bin/python"
 WORDS_DIR = Path(os.environ.get("WORDS_DIR", str(Path(__file__).resolve().parents[2] / "local/words")))
@@ -246,6 +247,8 @@ class Handler(BaseHTTPRequestHandler):
         q = parse_qs(urlsplit(self.path).query)
         params = {k: q[k][0] for k in ("memo_id", "filename", "ts") if q.get(k)}
         log.info("memo upload id=%s bytes=%d", params.get("memo_id", "?"), len(body))
+        if MEMO_DEBUG.exists() and re.fullmatch(r"[0-9a-f]{32}", params.get("memo_id", "")):
+            d = MEMO_DEBUG.parents[1] / "memo-debug"; d.mkdir(exist_ok=True); (d / f"{params['memo_id']}.opus").write_bytes(body)
         try:
             conn = http.client.HTTPConnection("127.0.0.1", SUIJI_PORT, timeout=360)  # apple 转写子进程上限 300 s + 起题
             conn.request("POST", "/voice?" + urlencode(params), body=body, headers={"Content-Type": "application/octet-stream"})

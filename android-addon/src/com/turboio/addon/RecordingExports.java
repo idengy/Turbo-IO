@@ -25,7 +25,7 @@ final class RecordingExports {
             File externalRoot = external == null ? null : external.getParentFile();
             try {
                 for(File root : new File[]{data, externalRoot})
-                    scan(root, 0, text, files, seen, budget);
+                    if(root != null) scan(root.getCanonicalFile(), 0, text, files, seen, budget);  // r31:先规范化,否则 scan 的符号链接检查可能挡掉整个根
             } catch (IOException ignored) {}
             files.sort((a,b)->Long.compare(b.lastModified(),a.lastModified()));
             MAIN.post(() -> {
@@ -64,11 +64,21 @@ final class RecordingExports {
         new Thread(() -> {
             File data = new File(activity.getApplicationInfo().dataDir), external = activity.getExternalFilesDir(null);
             File externalRoot = external == null ? null : external.getParentFile();
-            long since = System.currentTimeMillis() - 3600_000L; List<File> files = new ArrayList<>(); int[] budget = {60000};
-            for(File root : new File[]{data, externalRoot}) walk(root, 0, since, files, budget);
+            long since = System.currentTimeMillis() - 3600_000L; List<File> files = new ArrayList<>();
+            StringBuilder roots = new StringBuilder();
+            // r31:每个根单独预算并报告遍历情况(r30 实机私有目录一个文件都没列出,疑根被符号链接检查挡掉或预算耗尽)
+            for(File root : new File[]{data, externalRoot}) {
+                if(root == null) continue; int[] budget = {80000}; int before = files.size(); String canon;
+                try { canon = root.getCanonicalPath(); } catch(IOException e) { canon = "?" ; }
+                File[] top = new File(canon).listFiles();
+                walk(new File(canon), canon, 0, since, files, budget);
+                roots.append("\n根 ").append(root.getAbsolutePath()).append(canon.equals(root.getAbsolutePath()) ? "" : " → " + canon)
+                     .append(" · 可列目录 ").append(top == null ? "否" : top.length + " 项").append(" · 遍历 ").append(80000 - budget[0]).append(" 节点")
+                     .append(budget[0] <= 0 ? "(预算用尽)" : "").append(" · 命中 ").append(files.size() - before);
+            }
             files.sort((a,b)->Long.compare(b.lastModified(),a.lastModified()));
             SimpleDateFormat format = new SimpleDateFormat("HH:mm:ss",Locale.ROOT);
-            StringBuilder b = new StringBuilder(files.isEmpty() ? "最近 1 小时没有文件变动" : "共 " + files.size() + " 个(新的在上,最多 150 个)\n");
+            StringBuilder b = new StringBuilder(files.isEmpty() ? "最近 1 小时没有文件变动" : "共 " + files.size() + " 个(新的在上,最多 150 个)").append(roots).append('\n');
             for(int i=0;i<Math.min(150,files.size());i++){File f=files.get(i);b.append('\n').append(format.format(new Date(f.lastModified()))).append("  ").append(f.length()/1024).append(" KB  ").append(relative(f.getParentFile(),data,externalRoot)).append('/').append(f.getName());}
             final String text = b.toString();
             MAIN.post(() -> { if(activity.isFinishing()) return;
@@ -79,10 +89,10 @@ final class RecordingExports {
                     .setPositiveButton("关闭", null).show(); });
         },"TurboIO-recent-files").start();
     }
-    private static void walk(File node,int depth,long since,List<File> out,int[] budget){
+    private static void walk(File node,String root,int depth,long since,List<File> out,int[] budget){
         if(node==null||depth>14||budget[0]--<=0||out.size()>=2000)return;
-        try{if(!node.getAbsolutePath().equals(node.getCanonicalPath()))return;}catch(IOException e){return;}
-        if(node.isDirectory()){String n=node.getName();if(n.equals("flutter_assets")||n.equals("code_cache")||n.equals("lib"))return;File[] c=node.listFiles();if(c!=null)for(File x:c)walk(x,depth+1,since,out,budget);}
+        try{if(!node.getCanonicalPath().startsWith(root))return;}catch(IOException e){return;}  // 只防跳出根的符号链接,根本身先规范化
+        if(node.isDirectory()){String n=node.getName();if(n.equals("flutter_assets")||n.equals("code_cache")||n.equals("lib")||n.equals("caption_model"))return;File[] c=node.listFiles();if(c!=null)for(File x:c)walk(x,root,depth+1,since,out,budget);}
         else if(node.isFile()&&node.lastModified()>=since)out.add(node);
     }
     /** 所在目录相对私有数据目录(data/…)或外部目录(ext/…)的路径,列表里定位录音用。 */

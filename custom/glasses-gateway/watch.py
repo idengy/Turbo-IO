@@ -104,15 +104,15 @@ def clamp_page_seconds(v) -> float:
     return min(hi, max(lo, f))
 
 
-def format_page(rows: dict, names: list[str], page: int, size: int = PAGE_SIZE, compact: int = COMPACT, asof: str = "") -> str:
-    """轮播模式的一帧:第 page 页的行;多于一页时首行末尾加「 p/n」;只有一页时等同 format_panel(含 ≤4 品种时钟行)。"""
+def format_page(rows: dict, names: list[str], page: int, size: int = PAGE_SIZE, compact: int = COMPACT, asof: str = "", paused: bool = False) -> str:
+    """轮播模式的一帧:第 page 页的行;多于一页时首行末尾加「 p/n」(暂停翻页时「 p/n 停」);只有一页时等同 format_panel(含 ≤4 品种时钟行)。"""
     ps = pages(names, size)
     total = len(ps)
     if total <= 1:
         return format_panel(rows, names, asof, compact)
     page = max(0, min(page, total - 1))
     lines = [line(n, rows.get(n), compact) for n in ps[page]]
-    lines[0] = f"{lines[0]}  {page + 1}/{total}"
+    lines[0] = f"{lines[0]}  {page + 1}/{total}" + (" 停" if paused else "")
     return "\n".join(lines)
 
 

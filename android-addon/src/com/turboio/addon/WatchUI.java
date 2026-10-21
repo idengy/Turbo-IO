@@ -3,7 +3,7 @@ import android.app.*;import android.os.*;import android.widget.*;import java.uti
 /** 期货盯盘页(bill 分支):添加合约(≤12,r10 前 ≤5;超过一屏 = 眼镜滚轮翻 / 轮播)、开始/停止、确认眼镜已回首页(诊断探针与开关入口 2026-10-21 r23 移除,WatchController.startTest/startProbe 保留)。关页不停盯盘(后台继续要在设置里开「后台运行」)。 */
 final class WatchUI {
  static void show(Activity a){EditorialUI.Screen s=new EditorialUI.Screen(a,"期货盯盘");LinearLayout b=s.body;
-  b.addView(EditorialUI.text(a,"眼镜文字面板显示所选合约的最新价与涨跌幅，约 1 秒一帧；每页 6 行（可调），超过时默认自动轮播翻页。面板会占满眼镜画面，期间音乐/阅读/导航不可用。会话每 55 分钟自动续开。眼镜上长按旋钮退出面板 = 停止（手机随之释放会话，同点「停止」）；想再看就点「开始盯盘」或对眼镜说「开始盯盘」。退后台继续需在设置里开「后台运行」。",14,EditorialUI.MUTED));
+  b.addView(EditorialUI.text(a,"眼镜文字面板显示所选合约的最新价与涨跌幅，约 1 秒一帧；每页 6 行（可调），超过时默认自动轮播翻页。面板会占满眼镜画面，期间音乐/阅读/导航不可用。会话每 55 分钟自动续开。眼镜上长按旋钮退出面板 = 停止（手机随之释放会话，同点「停止」）；轮播时转一下旋钮 = 暂停翻页（首行页码后显示「停」，价格照常刷新），再转一下恢复；想再看就点「开始盯盘」或对眼镜说「开始盯盘」。退后台继续需在设置里开「后台运行」。",14,EditorialUI.MUTED));
   TextView state=EditorialUI.text(a,"",14,EditorialUI.LIME);b.addView(state);
   EditorialUI.button(a,b,"开始盯盘 / 重新投到眼镜",true,()->run(a,WatchController.start()));
   EditorialUI.button(a,b,"停止盯盘",false,()->WatchController.stop("用户停止"));

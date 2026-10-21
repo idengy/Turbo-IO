@@ -78,6 +78,8 @@ class FormatTest(unittest.TestCase):
         self.assertTrue(p1[0].endswith("  1/2") and p2[0].endswith("  2/2"), (p1[0], p2[0]))
         self.assertTrue(p2[0].startswith("黄金") and p2[1].startswith("白银"))
         self.assertEqual(watch.format_page(rows, names, 9, 5), watch.format_page(rows, names, 1, 5))  # 越界钉到末页
+        self.assertTrue(watch.format_page(rows, names, 1, 5, paused=True).split("\n")[0].endswith("  2/2 停"))  # 旋钮暂停翻页
+        self.assertEqual(watch.format_page(rows, names[:4], 0, 5, paused=True), watch.format_page(rows, names[:4], 0, 5))  # 一页时不标
         # 一页装得下 → 与 format_panel 一致(含 ≤4 品种时钟行)
         four = names[:4]
         self.assertEqual(watch.format_page(rows, four, 0, 5, asof=watch.asof_of(rows)), watch.format_panel(rows, four, watch.asof_of(rows)))

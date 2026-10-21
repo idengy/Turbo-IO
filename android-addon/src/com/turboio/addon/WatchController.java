@@ -43,15 +43,22 @@ public final class WatchController {
             // r27:面板退出信号在 stopping(已被 t3/t4 触发停止)时也收——否则卡在等回执、落 uncertain
             if((ph.equals("ready")||ph.equals("stopping"))&&WatchSession.subtitleExit(bytes)){stop("眼镜已退出面板（长按或官方字幕接管），已停止"+task,true);return;}
             // r22:背单词时转旋钮(任一方向)= 回上一个词,网关停留 BACK_PAUSE 秒后接着放新词
-            if(ph.equals("ready")&&task.equals("背单词")&&WatchSession.wheelScroll(bytes))wordsBack();});}
+            if(ph.equals("ready")&&WatchSession.wheelScroll(bytes)){if(task.equals("背单词"))wordsBack();else if(task.equals("盯盘"))watchPause();}});}
+    /** 盯盘转旋钮 = 暂停/恢复轮播翻页(2026-10-21 Bill 定)。转一下常连着好几格:1.5 s 内的连续格算一次手势,只切换一次。 */
+    private static long lastWheel;private static boolean pausedHint;
+    private static void watchPause(){
+        long now=SystemClock.elapsedRealtime();boolean same=now-lastWheel<1500;lastWheel=now;if(same||!rotate())return;
+        pausedHint=!pausedHint;note=pausedHint?"旋钮：暂停翻页":"旋钮：恢复翻页";get("/v1/watch/pause","翻页切换失败");}
     private static int backs;private static boolean listening;private static long lastBack;
     /** 通知网关回看;失败只记在状态行,不影响流。 */
     private static void wordsBack(){
-        final String url,key;try{url=origin()+"/v1/words/back";key=SecretStore.get(app);}catch(Exception e){return;}
         long now=SystemClock.elapsedRealtime();if(now-lastBack<200)return;lastBack=now;  // 同一格的重复事件(实测真实两格间隔 ≥0.6 s)
-        backs++;note="旋钮回看 ×"+backs;
+        backs++;note="旋钮回看 ×"+backs;get("/v1/words/back","回看失败");}
+    /** 后台 GET 网关控制口;失败只记在状态行,不影响流。 */
+    private static void get(String path,String failure){
+        final String url,key;try{url=origin()+path;key=SecretStore.get(app);}catch(Exception e){return;}
         Thread t=new Thread(()->{HttpURLConnection http=null;try{http=(HttpURLConnection)new URL(url).openConnection();http.setConnectTimeout(5000);http.setReadTimeout(5000);http.setInstanceFollowRedirects(false);http.setRequestProperty("Authorization","Bearer "+key);
-            int code=http.getResponseCode();if(code!=200)MAIN.post(()->note="回看失败：HTTP "+code);}catch(Exception e){MAIN.post(()->note="回看失败："+e.getClass().getSimpleName());}finally{if(http!=null)http.disconnect();}},"TurboIO-words-back");
+            int code=http.getResponseCode();if(code!=200)MAIN.post(()->note=failure+"：HTTP "+code);}catch(Exception e){MAIN.post(()->note=failure+"："+e.getClass().getSimpleName());}finally{if(http!=null)http.disconnect();}},"TurboIO-watch-control");
         t.setDaemon(true);t.start();}
     // ---- 背单词设置(每帧秒数、随机顺序;排版与词库都在网关) ----
     static int wordsSeconds(){return prefs.getInt("words_seconds",6);}
@@ -150,7 +157,7 @@ public final class WatchController {
     private static String begin(String t,String key,String first,String n){
         if(!NavGlasses.startCaption(first))return "无法开启眼镜显示："+NavGlasses.status();
         task=t;leased=BackgroundWork.acquire(task,16);
-        epoch++;running=true;renewing=false;attempt=0;backs=0;lastData=0;lastText="";sessionStart=SystemClock.elapsedRealtime();note=n;
+        epoch++;running=true;renewing=false;attempt=0;backs=0;pausedHint=false;lastData=0;lastText="";sessionStart=SystemClock.elapsedRealtime();note=n;
         final long e=epoch;spawn(e,key);MAIN.removeCallbacks(tick);MAIN.postDelayed(tick,1000);
         return null;
     }

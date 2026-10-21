@@ -124,6 +124,24 @@ def is_quote_question(text: str, quotes: "Quotes") -> bool:
     return bool(quotes.find_names(t)) and len(t) <= 16
 
 
+class WatchControl:
+    """一条盯盘流的控制口:/v1/watch/pause 切换「暂停翻页」(眼镜转旋钮,2026-10-21)。"""
+    lock = threading.Lock()
+    live: set = set()
+
+    def __init__(self):
+        self.toggles = 0
+
+    def toggle(self):
+        with WatchControl.lock:
+            self.toggles += 1
+
+    def take(self) -> int:
+        with WatchControl.lock:
+            n, self.toggles = self.toggles, 0
+        return n
+
+
 class WordsControl:
     """一条背单词流的控制口:/v1/words/back 累加回看次数并唤醒流的等待。"""
     lock = threading.Lock()
@@ -175,9 +193,16 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(200, {"ok": True, "streams": len(live)})
             return self._words(words.clamp_seconds(query.get("seconds", [""])[0]), "shuffle" if query.get("order", [""])[0] == "shuffle" else "seq",
                                query.get("probe", ["0"])[0] == "1")
-        if path.endswith("/v1/watch/names") or path.endswith("/v1/watch/stream") or path.endswith("/v1/watch/resolve"):
+        if path.endswith("/v1/watch/names") or path.endswith("/v1/watch/stream") or path.endswith("/v1/watch/resolve") or path.endswith("/v1/watch/pause"):
             if not self._authorized():
                 return self._json(401, {"error": {"message": "unauthorized"}})
+            if path.endswith("/v1/watch/pause"):  # 眼镜转旋钮(插件转发):正在放的盯盘流切换暂停/恢复翻页
+                with WatchControl.lock:
+                    live = list(WatchControl.live)
+                for c in live:
+                    c.toggle()
+                log.info("watch pause toggle streams=%d", len(live))
+                return self._json(200, {"ok": True, "streams": len(live)})
             if path.endswith("/v1/watch/names"):
                 return self._json(200, {"names": [{"name": n, "short": watch.short(n)} for n in self.quotes.names]})
             # BaseHTTPRequestHandler 把请求行按 latin-1 解码,原样 UTF-8 的中文要转回;%XX 编码的由 parse_qs 处理
@@ -236,6 +261,11 @@ class Handler(BaseHTTPRequestHandler):
         started = time.time()
         sent_version, last_frame, last_write = 0, 0.0, started  # 首帧等真实快照,最多等 3 s 再发占位
         sent_page = -1
+        rot_origin, paused, frozen = started, False, 0  # 轮播起点;暂停时冻结在 frozen 页,恢复后从该页重新计时
+        ctl = WatchControl()
+        with WatchControl.lock:
+            WatchControl.live.add(ctl)
+        sent_paused = False
         try:
             while True:
                 with stream.cond:
@@ -248,21 +278,29 @@ class Handler(BaseHTTPRequestHandler):
                 if error is not None:
                     self._write_chunk(("data: " + json.dumps({"type": "error", "message": error}, ensure_ascii=False) + "\n\n").encode())
                     break
-                page = watch.page_of(now - started, page_seconds, total_pages) if mode == "rotate" else 0
-                changed = version != sent_version or page != sent_page or (sent_version == 0 and now - started >= 3.0)
+                if mode == "rotate" and ctl.take() % 2:
+                    if paused:
+                        paused, rot_origin = False, now - frozen * page_seconds
+                    else:
+                        paused, frozen = True, watch.page_of(now - rot_origin, page_seconds, total_pages)
+                    log.info("watch %s page=%d/%d", "paused" if paused else "resumed", frozen + 1, total_pages)
+                page = (frozen if paused else watch.page_of(now - rot_origin, page_seconds, total_pages)) if mode == "rotate" else 0
+                changed = version != sent_version or page != sent_page or paused != sent_paused or (sent_version == 0 and now - started >= 3.0)
                 if changed and now - last_frame >= watch.FRAME_INTERVAL:
                     asof = watch.asof_of(rows)
-                    text = watch.format_page(rows, names, page, page_size, asof=asof) if mode == "rotate" else watch.format_panel(rows, names, asof)
+                    text = watch.format_page(rows, names, page, page_size, asof=asof, paused=paused) if mode == "rotate" else watch.format_panel(rows, names, asof)
                     event = {"type": "quote", "text": text, "asof": asof, "page": page + 1, "pages": total_pages,
                              "rows": [{"name": n, "last": rows.get(n, {}).get("last"), "chg_pct": rows.get(n, {}).get("chg_pct")} for n in names]}
                     self._write_chunk(("data: " + json.dumps(event, ensure_ascii=False) + "\n\n").encode())
-                    sent_version, sent_page, last_frame, last_write = max(version, 1), page, now, now
+                    sent_version, sent_page, sent_paused, last_frame, last_write = max(version, 1), page, paused, now, now
                 elif now - last_write >= watch.HEARTBEAT:
                     self._write_chunk(b": hb\n\n"); last_write = now
             self.wfile.write(b"0\r\n\r\n"); self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError, TimeoutError):
             log.info("watch client went away")
         finally:
+            with WatchControl.lock:
+                WatchControl.live.discard(ctl)
             self.close_connection = True  # 同 _words:流结束就关,不再 keep-alive 读下一请求(客户端已走,只会刷 reset 栈)
             self.hub.release(stream)
             log.info("watch end names=%s", ",".join(names))

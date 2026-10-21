@@ -5,6 +5,7 @@ import android.content.SharedPreferences;
 import android.os.FileObserver;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -27,12 +28,18 @@ final class MemoForwarder {
     private static int failures;
     private static String note = "未开始";
     private static final Runnable retry = MemoForwarder::drain;
+    private static final String TAG = "TurboIOMemo";
+    /** r33 兜底:FileObserver 之外每 RESCAN_MS 列一次目录(只 listFiles,不联网;深度休眠时 Handler 不会唤醒设备)。
+     *  r32 实机两条录音都没触发上传,不确定是没同步还是没收到 inotify,两条路都留。 */
+    private static final long RESCAN_MS = 120_000;
+    private static final Runnable rescan = new Runnable(){public void run(){if(!enabled())return;catchUp();MAIN.postDelayed(this,RESCAN_MS);}};
 
     static void init(Context c) {
         if (app == null) { app = c.getApplicationContext(); prefs = app.getSharedPreferences("turboio_memo", 0); }
         if (!enabled()) return;
         if (observers.isEmpty()) watch();
         catchUp();  // install() 每次宿主 Activity 重建都会来:顺便补扫一次(只列一个目录,很轻)
+        MAIN.removeCallbacks(rescan); MAIN.postDelayed(rescan, RESCAN_MS);
     }
     static boolean enabled() { return prefs != null && prefs.getBoolean("enabled", true); }
     static void enabled(boolean on) {
@@ -60,18 +67,20 @@ final class MemoForwarder {
     private static void watch() {
         List<File> ds = dirs();
         if (ds.isEmpty()) { note = "还没有录音目录（录一条后重开 App 生效）"; return; }
-        if (!prefs.getBoolean("baseline", false)) {  // 第一次开启:已有录音不补传
-            Set<String> d = done();
-            for (File dir : ds) { File[] fs = dir.listFiles(); if (fs != null) for (File f : fs) { String id = MemoPolicy.memoId(f.getName()); if (id != null) d.add(id); } }
-            prefs.edit().putStringSet("done", d).putBoolean("baseline", true).apply();
+        if (!prefs.getBoolean("baseline2", false)) {  // 第一次开启:旧录音不补传。r33 起只把 BASELINE_AGE 以前的算旧——r32 装完马上录的那条被整体基线吞掉了
+            Set<String> d = new HashSet<>(); long cut = System.currentTimeMillis() - MemoPolicy.BASELINE_AGE_MS; int n = 0;  // 重建而非并入:r32 从未上传过,旧 done 全是整体基线
+            for (File dir : ds) { File[] fs = dir.listFiles(); if (fs != null) for (File f : fs) { String id = MemoPolicy.memoId(f.getName()); if (id != null && f.lastModified() < cut) { d.add(id); n++; } } }
+            prefs.edit().putStringSet("done", d).putBoolean("baseline2", true).apply();
+            Log.i(TAG, "baseline: " + n + " old memos marked done");
         }
         for (File dir : ds) {
             FileObserver o = new FileObserver(dir, FileObserver.CLOSE_WRITE | FileObserver.MOVED_TO) {
-                @Override public void onEvent(int event, String path) { if (path != null) MAIN.post(() -> consider(new File(dir, path))); }
+                @Override public void onEvent(int event, String path) { Log.i(TAG, "event " + event + " " + path); if (path != null) MAIN.post(() -> consider(new File(dir, path))); }
             };
             o.startWatching(); observers.add(o);
         }
         note = "正在监听";
+        Log.i(TAG, "watching " + ds);
     }
     private static void catchUp() {
         Set<String> d = done();
@@ -84,11 +93,12 @@ final class MemoForwarder {
         String id = MemoPolicy.memoId(f.getName());
         if (id == null || !enabled() || done().contains(id) || pending.containsKey(id) || !checking.add(id)) return;
         final long size = f.length();
+        Log.i(TAG, "consider " + f.getName() + " " + size + " B");
         MAIN.postDelayed(() -> {
             checking.remove(id);
             if (!f.isFile()) return;
             if (f.length() != size || size == 0) { consider(f); return; }
-            pending.put(id, f); drain();
+            Log.i(TAG, "queued " + f.getName()); pending.put(id, f); drain();
         }, MemoPolicy.STABLE_MS);
     }
 
@@ -100,7 +110,7 @@ final class MemoForwarder {
         try {
             url = WatchController.origin() + "/v1/memo?memo_id=" + id + "&filename=" + URLEncoder.encode(f.getName(), "UTF-8") + "&ts=" + f.lastModified();
             key = SecretStore.get(app);
-        } catch (Exception e) { note = "未配置自有模型地址与 Key，暂不上传"; return; }
+        } catch (Exception e) { note = "未配置自有模型地址与 Key，暂不上传"; Log.w(TAG, "no endpoint/key: " + e); return; }
         uploading = true; note = "上传中…";
         Thread t = new Thread(() -> {
             int code = -1; String err = "";
@@ -126,6 +136,7 @@ final class MemoForwarder {
     private static void finished(String id, int code, String why) {
         uploading = false;
         MemoPolicy.Outcome o = MemoPolicy.outcome(code);
+        Log.i(TAG, "upload " + id + " -> " + code + " " + why + " " + o);
         if (o == MemoPolicy.Outcome.RETRY) {
             failures++; long d = MemoPolicy.retryDelay(failures);
             note = "上传失败（" + (code > 0 ? "HTTP " + code : why) + "），" + d / 60000 + " 分钟后补传";

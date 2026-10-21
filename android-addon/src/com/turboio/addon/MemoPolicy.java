@@ -7,6 +7,7 @@ public final class MemoPolicy {
     public enum Outcome { DONE, SKIP, RETRY }
     public static final long STABLE_MS = 3000;                 // 文件大小连续不变这么久才算同步写完
     public static final long MAX_BYTES = 2L * 1024 * 1024;     // 与网关 / suiji-bot 上限一致
+    public static final long BASELINE_AGE_MS = 30 * 60_000L;  // 首次开启时只把 30 分钟以前的录音当旧的(r33)
     private static final long[] RETRY_MS = {60_000, 120_000, 300_000, 600_000, 1_800_000};
 
     /** 成品录音文件名 → 录音 id;不是成品返回 null。 */

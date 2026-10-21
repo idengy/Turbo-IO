@@ -433,6 +433,28 @@ class Handler(BaseHTTPRequestHandler):
             conn.close()
 
 
+# Tailscale 保活(2026-10-21):手机走 5G 时隧道闲置断开后,手机端主动发起连不上 Mac(家里路由 IPv6 防火墙挡入站、
+# Mac 的 DERP 落在纽伦堡,打洞协调失效),只有 Mac 先发包才能打通。每 KEEPALIVE_SECONDS 从 Mac ICMP ping 手机的 tailnet IP 一次。
+# 不用 `tailscale ping`:LaunchAgent 里调 Tailscale.app 的 CLI 会去拉 GUI 失败,且退出码仍是 0。
+KEEPALIVE_PEER = os.environ.get("TS_KEEPALIVE_PEER", "100.113.176.95")  # 手机 v2436a 的 tailnet IP;空串 = 关闭
+KEEPALIVE_SECONDS = 25
+
+
+def tailscale_keepalive():
+    ok = None
+    while True:
+        try:
+            r = subprocess.run(["/sbin/ping", "-c", "1", "-t", "5", KEEPALIVE_PEER], capture_output=True, text=True, timeout=15)
+            now = r.returncode == 0
+            detail = [l for l in r.stdout.splitlines() if "bytes from" in l or "packet loss" in l][:1]
+        except (OSError, subprocess.SubprocessError) as e:
+            now, detail = False, [type(e).__name__]
+        if now != ok:  # 只在通断变化时记一行
+            log.info("tailscale keepalive %s %s: %s", KEEPALIVE_PEER, "ok" if now else "FAIL", " ".join(detail)[:120])
+            ok = now
+        time.sleep(KEEPALIVE_SECONDS)
+
+
 def main():
     logging.basicConfig(level=logging.INFO, stream=sys.stderr, format="%(asctime)s %(levelname)s %(message)s")
     if not API_KEY:
@@ -442,6 +464,8 @@ def main():
     Handler.deck = words.Deck(WORDS_DIR); Handler.deck_lock = threading.Lock()
     log.info("word deck: %d entries from %s", Handler.deck.total(), WORDS_DIR)
     log.info("variety names loaded: %d (+%d aliases)", len(Handler.quotes.names), len(Handler.quotes.aliases))
+    if KEEPALIVE_PEER:
+        threading.Thread(target=tailscale_keepalive, name="ts-keepalive", daemon=True).start()
     srv = ThreadingHTTPServer((HOST, PORT), Handler)
     srv.daemon_threads = True
     log.info("listening on http://%s:%d -> hermes %s:%d", HOST, PORT, HERMES_HOST, HERMES_PORT)

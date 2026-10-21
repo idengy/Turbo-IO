@@ -72,6 +72,9 @@ public final class NavGlasses {
             send(3,new JSONObject().put("sid",sid).put("reason_code",10).put("text",""));
         }catch(Exception e){closeStep=0;mark("uncertain","退出未确认，请用眼镜按钮关闭");}
     }};
+    /** 眼镜自己报告字幕面板已退出(启动器 glass_preview aiSubtitle action=2:长按退出、官方实时字幕接管):
+     *  面板确定已关,不再发 type3 等回执——接管时回执常失败落 uncertain,还可能干扰刚打开的官方字幕(2026-10-21 实机)。 */
+    public static void exitedByGlasses(){if(phase.equals("idle"))return;autoIdle=false;closeStep=0;MAIN.removeCallbacks(tick);MAIN.removeCallbacks(closer);sid="";device="";latest="";pending=false;mark("idle","眼镜已退出显示面板");}
     public static void confirmIdle(){if(phase.equals("starting")||phase.equals("ready"))return;autoIdle=false;closeStep=0;MAIN.removeCallbacks(tick);MAIN.removeCallbacks(closer);sid="";device="";latest="";pending=false;mark("idle","已由用户确认镜片退出");}
     /** 盯盘 55 分钟续期:只在 ready 时有效;关闭帧被 SDK 确认送达后自动回 idle,由 WatchController 再开新 sid。 */
     public static void renew(){if(!phase.equals("ready"))return;autoIdle=true;halt();}

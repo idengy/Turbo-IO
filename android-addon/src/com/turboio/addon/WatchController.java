@@ -37,7 +37,7 @@ public final class WatchController {
         // r24:install() 每次宿主 Activity 重建(折叠屏开合等)都会调 init,监听只注册一次——r22/r23 实机重复注册 4 份,转一格回退 4 个词
         if(listening)return;listening=true;
         NativeTransfer.receive((peer,bytes)->{if(!running||renewing||!NavGlasses.phase().equals("ready"))return;
-            if(WatchSession.subtitleExit(bytes)){stop("眼镜长按退出，已停止"+task);return;}
+            if(WatchSession.subtitleExit(bytes)){stop("眼镜已退出面板（长按或官方字幕接管），已停止"+task,true);return;}
             // r22:背单词时转旋钮(任一方向)= 回上一个词,网关停留 BACK_PAUSE 秒后接着放新词
             if(task.equals("背单词")&&WatchSession.wheelScroll(bytes))wordsBack();});}
     private static int backs;private static boolean listening;private static long lastBack;
@@ -164,13 +164,15 @@ public final class WatchController {
         }},300);
         return null;
     }
-    static void stop(String reason){
+    static void stop(String reason){stop(reason,false);}
+    /** glassesExited = 眼镜已报告面板退出:本地直接回 idle,不发关闭帧。 */
+    private static void stop(String reason,boolean glassesExited){
         boolean was=running,probe=!mode.isEmpty();running=false;renewing=false;voicePending=false;epoch++;MAIN.removeCallbacks(tick);
         final HttpURLConnection c=connection;connection=null;if(c!=null){Thread t=new Thread(c::disconnect,"TurboIO-watch-close");t.setDaemon(true);t.start();}
         if(!mode.isEmpty())mode="";
         // 2026-10-21 审查:只关自己开的会话。MusicPlayer.background() 等处在未运行时也会调 stop,原来会顺手关掉云端字幕/导航的显示
         if(!was&&!probe)return;
-        if(NavGlasses.active())NavGlasses.closeAuto();
+        if(glassesExited)NavGlasses.exitedByGlasses();else if(NavGlasses.active())NavGlasses.closeAuto();
         if(was)BackgroundWork.release(task);
         note=reason;
     }

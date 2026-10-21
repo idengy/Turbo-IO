@@ -21,7 +21,8 @@ SUMS=local/downloads/SHA256SUMS.local
 [ -f "$UNSIGNED" ] || { echo "STOP: 缺 $UNSIGNED,先跑 B 段 package.mjs + --guarded"; exit 1; }
 [ -f "$OFFICIAL" ] || { echo "STOP: 缺官方 APK $OFFICIAL"; exit 1; }
 [ -f "$KEYSTORE" ] || { echo "STOP: 缺 keystore $KEYSTORE"; exit 1; }
-if [ -e "$SIGNED" ]; then  # 上一轮签名包不覆盖、不删除,按其 SHA 前 8 位改名留档
+if [ -e "$SIGNED" ]; then  # 上一轮签名包按其 SHA 前 8 位改名留档,更早的 prev 删掉(只留一轮,见 CLAUDE.md 构建产物留档规则)
+  rm -f "${SIGNED%.apk}".prev-*.apk "${SIGNED%.apk}".prev-*.apk.idsig
   prev=$(shasum -a 256 "$SIGNED" | cut -c1-8); mv "$SIGNED" "${SIGNED%.apk}.prev-$prev.apk"; [ -e "$SIGNED.idsig" ] && mv "$SIGNED.idsig" "${SIGNED%.apk}.prev-$prev.apk.idsig"
   echo "[0/5] 旧签名包已改名为 ${SIGNED%.apk}.prev-$prev.apk"
 fi

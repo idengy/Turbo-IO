@@ -53,6 +53,11 @@
   `tools/`(apktool 3.0.3 jar+启动器、REA 用的 jadx-headless-mcp 0.7.1 jar)、`android-sdk/`(platform-tools、platforms/android-36、build-tools/36.0.0,
   用 Google cmdline-tools 装的项目内 SDK,`_dl/` 是下载缓存)。**Android 工具链全部装在这里,不装全局**(2026-10-18 定)。
 - `custom/scripts/sign_guarded.sh` — C0 签名脚本,Bill 在自己终端跑(apksigner 交互要口令,口令不进聊天):SHA 核对 → zipalign → v3 签名 → 证书指纹必须不变 → `verify_apk --guarded` → SHA 记 SUMS。
+- **构建产物留档规则(2026-10-21 定,原因:每轮约 1.6 GB 只留不删,r1–r29 两天吃掉 46 GB、硬盘满)**:
+  `android-addon/build/` 与 `local/build/` 的 APK(assembled / unsigned / guarded-unsigned / signed)**只留当前一份 + 上一轮一份**。
+  每轮新产物改名留档(`*.rN-日期`、`sign_guarded.sh` 的 `*.prev-<SHA8>.apk`)时,同时删掉更早轮次的 APK 及其 `.idsig`;
+  作废包(实机失败、被取代)不留档。可追溯性靠 SHA:每轮 SHA 记进 `local/downloads/SHA256SUMS.local` 与 TODO.md,
+  `*.audit.json`、`package-report*.json`、`*-verify.json`、构建日志这类小文件保留不删。需要回退到更早版本就从对应 commit 重打。
 - `custom/scripts/env.sh` — `source` 后 JAVA_HOME(Homebrew openjdk@17)、ANDROID_SDK_ROOT、PATH(adb/apksigner/zipalign/apktool)、REA_* 全部指向上面;
   跑 `android-addon/build.sh`、adb、apktool 前先 source。
 - `.mcp.json`(项目根,gitignored,含本机绝对路径)— REA 的 MCP 注册:`npx -y rea-agents@6.7.0 mcp`,env 给 JAVA_HOME / REA_JADX_MCP_JAR /

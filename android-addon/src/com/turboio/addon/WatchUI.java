@@ -56,7 +56,7 @@ final class WatchUI {
   s.dialog.setOnDismissListener(d->h.removeCallbacks(tick));}
  /** r19 诊断:入站记录复制 / 清空(盯盘页、背单词页共用)。 */
  static void traceButtons(Activity a,LinearLayout card){
-  card.addView(EditorialUI.text(a,"入站记录(r19):会话期间眼镜发来的每个事件带时间记在状态行下方。测法:开始后分别长按、短按、转旋钮,每次隔 5 秒以上,记下按的时间,再点复制发给 Claude。",14,EditorialUI.MUTED));
+  card.addView(EditorialUI.text(a,"入站记录(r20):会话期间眼镜发来的每个事件带时间记在状态行下方。测法:开始后分别长按、短按、转旋钮,每次隔 5 秒以上,记下按的时间,再点复制发给 Claude。",14,EditorialUI.MUTED));
   EditorialUI.button(a,card,"复制入站记录",false,()->{((android.content.ClipboardManager)a.getSystemService(android.content.Context.CLIPBOARD_SERVICE)).setPrimaryClip(android.content.ClipData.newPlainText("Turbo IO 入站记录",InboundTrace.dump()));Toast.makeText(a,"已复制",Toast.LENGTH_SHORT).show();});
   EditorialUI.button(a,card,"清空入站记录",false,InboundTrace::clear);
  }

@@ -438,11 +438,18 @@ class Handler(BaseHTTPRequestHandler):
 # 不用 `tailscale ping`:LaunchAgent 里调 Tailscale.app 的 CLI 会去拉 GUI 失败,且退出码仍是 0。
 KEEPALIVE_PEER = os.environ.get("TS_KEEPALIVE_PEER", "100.113.176.95")  # 手机 v2436a 的 tailnet IP;空串 = 关闭
 KEEPALIVE_SECONDS = 25
+KEEPALIVE_OFF = Path(__file__).resolve().parents[2] / "local/config/ts-keepalive-off"  # 文件存在 = 暂停保活(对照测试用),删掉即恢复,不用重启
 
 
 def tailscale_keepalive():
     ok = None
     while True:
+        if KEEPALIVE_OFF.exists():
+            if ok != "paused":
+                log.info("tailscale keepalive paused (%s exists)", KEEPALIVE_OFF.name)
+            ok = "paused"
+            time.sleep(KEEPALIVE_SECONDS)
+            continue
         try:
             r = subprocess.run(["/sbin/ping", "-c", "1", "-t", "5", KEEPALIVE_PEER], capture_output=True, text=True, timeout=15)
             now = r.returncode == 0

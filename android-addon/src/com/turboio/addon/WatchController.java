@@ -34,14 +34,17 @@ public final class WatchController {
     static void init(Context c){app=c.getApplicationContext();prefs=app.getSharedPreferences("turboio_watch",0);BackgroundWork.register("盯盘",()->stop("从后台通知停止"));BackgroundWork.register("背单词",()->stop("从后台通知停止"));
         // r21(2026-10-21):眼镜长按退出字幕面板 → 启动器报 glass_preview aiSubtitle action=2 → 等同手机「停止」,释放会话与后台租约。
         // 只认 ready 且不在续期:续期自己发的 type3 也会让固件报 action=2;starting 期间的迟到帧同样忽略。
+        // r24:install() 每次宿主 Activity 重建(折叠屏开合等)都会调 init,监听只注册一次——r22/r23 实机重复注册 4 份,转一格回退 4 个词
+        if(listening)return;listening=true;
         NativeTransfer.receive((peer,bytes)->{if(!running||renewing||!NavGlasses.phase().equals("ready"))return;
             if(WatchSession.subtitleExit(bytes)){stop("眼镜长按退出，已停止"+task);return;}
             // r22:背单词时转旋钮(任一方向)= 回上一个词,网关停留 BACK_PAUSE 秒后接着放新词
             if(task.equals("背单词")&&WatchSession.wheelScroll(bytes))wordsBack();});}
-    private static int backs;
+    private static int backs;private static boolean listening;private static long lastBack;
     /** 通知网关回看;失败只记在状态行,不影响流。 */
     private static void wordsBack(){
         final String url,key;try{url=origin()+"/v1/words/back";key=SecretStore.get(app);}catch(Exception e){return;}
+        long now=SystemClock.elapsedRealtime();if(now-lastBack<200)return;lastBack=now;  // 同一格的重复事件(实测真实两格间隔 ≥0.6 s)
         backs++;note="旋钮回看 ×"+backs;
         Thread t=new Thread(()->{HttpURLConnection http=null;try{http=(HttpURLConnection)new URL(url).openConnection();http.setConnectTimeout(5000);http.setReadTimeout(5000);http.setInstanceFollowRedirects(false);http.setRequestProperty("Authorization","Bearer "+key);
             int code=http.getResponseCode();if(code!=200)MAIN.post(()->note="回看失败：HTTP "+code);}catch(Exception e){MAIN.post(()->note="回看失败："+e.getClass().getSimpleName());}finally{if(http!=null)http.disconnect();}},"TurboIO-words-back");

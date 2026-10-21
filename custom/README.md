@@ -17,6 +17,8 @@ Bill 自己的功能代码与文档。子目录约定见根 CLAUDE.md「目录�
 
 **手机走 5G 时「连接中」与 Tailscale（2026-10-21）**：症状 = 眼镜一直「单词本连接中 / 盯盘连接中」，网关日志无任何请求，手机 `curl` Mac 的 tailnet 地址超时。根因是 Mac 上 Clash Verge 在**全局模式**、Tailscale 的打洞/中继 UDP 被送进代理（Mac 的 DERP 落在纽伦堡），隧道闲置断开后手机无法主动重连，只有 Mac 先发包才通。**已根治**：Clash 改「规则」模式，当前配置的「编辑规则」前置 `PROCESS-NAME,io.tailscale.ipn.macsys.network-extension,DIRECT`、`DOMAIN-SUFFIX,tailscale.com|tailscale.io|ts.net,DIRECT`、`IP-CIDR,100.64.0.0/10,DIRECT,no-resolve`、`IP-CIDR6,fd7a:115c:a1e0::/48,DIRECT,no-resolve`；对照测试闲置 15 分钟后手机主动访问 0.46 s 通。**网关保活线程**（每 25 s `/sbin/ping` 手机 tailnet IP，`TS_KEEPALIVE_PEER` 默认 `100.113.176.95`）**默认暂停**：存在 `local/config/ts-keepalive-off` 即暂停（2026-10-21 起），删掉该文件即恢复，不用重启；通断变化记 `tailscale keepalive … ok/FAIL/paused`。再出「连接中」先查 Clash 是否仍是规则模式、直连规则还在，再考虑删标记开保活。不用 `tailscale ping`：LaunchAgent 里调 Tailscale.app CLI 会拉 GUI 失败且退出码仍为 0。另：网关 4xx 响应记 WARNING（含是否带 Authorization 头），Key 丢失能在日志看出。
 
+**语音备忘自动进随记（2026-10-22 r32）**：`POST /v1/memo?memo_id=<32hex>&filename=<id>.opus&ts=<epoch ms>`，请求体 = 原始音频（≤2 MB，Bearer 同上）→ 原样转发 suiji-bot `127.0.0.1:$SUIJI_PORT/voice`（默认 8001，超时 360 s），状态码与 JSON 原样返回：200 `{"status":"ok"|"duplicate",…}`、400/413/422 内容问题（插件不重试）、5xx/503 服务不可用（插件 1/2/5/10/30 min 退避补传）。来源是插件 `MemoForwarder`：官方 App 录完约 1 min 把录音同步成私有目录 `app_flutter/user_<uid>/audio/recordSync/<id>.opus`，插件 FileObserver 发现后大小稳定 3 s 即上传；suiji-bot 转写（ffmpeg → Apple 本机识别，失败换 whisper）、claude 起题、写当日随记 `## HH:MM 语音备忘:<标题>`，按录音 id 去重，写完飞书回执。验收：`curl -X POST --data-binary @x.opus -H "Authorization: Bearer $KEY" 'http://127.0.0.1:8650/v1/memo?memo_id=<32hex>&filename=x.opus'`。
+
 ## 背单词（2026-10-20）
 
 有道词典单词本 → 眼镜业务 19 文字面板循环显示「单词 / 音标 / 释义」，**不出声**。排版、节奏、顺序、词库全部在网关（改了即生效），插件只把盯盘的 SSE→面板壳换一个流地址（`WatchController.task`）。

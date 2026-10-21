@@ -18,7 +18,7 @@ import time
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, urlencode, urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import watch  # noqa: E402  盯盘推流与排版(同目录)
@@ -26,6 +26,8 @@ import words  # noqa: E402  背单词排版与牌组(同目录)
 
 HOST, PORT = "127.0.0.1", int(os.environ.get("GATEWAY_PORT", "8650"))
 HERMES_HOST, HERMES_PORT = "127.0.0.1", int(os.environ.get("HERMES_PORT", "8642"))
+SUIJI_PORT = int(os.environ.get("SUIJI_PORT", "8001"))  # suiji-bot(随记机器人)本机端口,/v1/memo 转发到它的 POST /voice
+MEMO_MAX_BYTES = 2 * 1024 * 1024
 KB_ROOT = Path(os.environ.get("FUTURES_KB_ROOT", "/Users/dyb/PROJECT/futures-kb"))
 KB_PY = KB_ROOT / "venv/bin/python"
 WORDS_DIR = Path(os.environ.get("WORDS_DIR", str(Path(__file__).resolve().parents[2] / "local/words")))
@@ -231,6 +233,30 @@ class Handler(BaseHTTPRequestHandler):
             return self._watch([h["label"] for h in hit], mode, page_seconds, page_size)
         self._forward(None)
 
+    def _memo(self, length: int):
+        """眼镜语音备忘(2026-10-22):插件把官方 App 同步到手机的 recordSync/<id>.opus 原样 POST 过来,
+        转给 suiji-bot `POST /voice`(只听 127.0.0.1)转写写进当日随记;状态码与 JSON 原样回给插件(200 ok/duplicate,4xx 不重试,5xx 稍后重试)。"""
+        if not self._authorized():
+            self.close_connection = True
+            return self._json(401, {"error": {"message": "unauthorized"}})
+        if length <= 0 or length > MEMO_MAX_BYTES:
+            self.close_connection = True
+            return self._json(413 if length > MEMO_MAX_BYTES else 400, {"error": {"message": "音频为空或超过 2 MB"}})
+        body = self.rfile.read(length)
+        q = parse_qs(urlsplit(self.path).query)
+        params = {k: q[k][0] for k in ("memo_id", "filename", "ts") if q.get(k)}
+        log.info("memo upload id=%s bytes=%d", params.get("memo_id", "?"), len(body))
+        try:
+            conn = http.client.HTTPConnection("127.0.0.1", SUIJI_PORT, timeout=360)  # apple 转写子进程上限 300 s + 起题
+            conn.request("POST", "/voice?" + urlencode(params), body=body, headers={"Content-Type": "application/octet-stream"})
+            r = conn.getresponse(); payload = r.read(); status = r.status; conn.close()
+        except OSError as e:
+            log.warning("memo forward failed: %s", e)
+            return self._json(503, {"error": {"message": f"随记服务不可用:{type(e).__name__}"}})
+        log.info("memo id=%s -> %d %s", params.get("memo_id", "?"), status, payload[:160].decode("utf-8", "replace"))
+        self.send_response(status); self.send_header("Content-Type", "application/json"); self.send_header("Content-Length", str(len(payload)))
+        self.end_headers(); self.wfile.write(payload)
+
     def _contracts(self, tokens: list[str]):
         """品种 / 品种+月份 → 标准 label(铁矿石2701);交给 futures-kb 的 resolve_contracts,规则只写一处。"""
         if not tokens:
@@ -390,6 +416,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         length = int(self.headers.get("Content-Length") or 0)
+        if urlsplit(self.path).path.rstrip("/").endswith("/v1/memo"):
+            return self._memo(length)
         body = self.rfile.read(length) if length else b""
         if self.path.rstrip("/").endswith("/v1/chat/completions") and self._authorized():
             try:

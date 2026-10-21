@@ -122,6 +122,25 @@ class StreamTest(unittest.TestCase):
         self.assertIsNot(s2, s)
         hub.release(s2)
 
+    def test_new_names_close_idle_old_stream_but_keep_busy_one(self):
+        log = logging.getLogger("test")
+        hub = watch.StreamHub(FAKE, None, log, idle=30)  # 回收计时器很长:旧流只能靠「被新列表取代」立即关
+        a = hub.acquire(["螺纹钢"]); hub.release(a)
+        busy = hub.acquire(["沪铜"])
+        b = hub.acquire(["铁矿石"])
+        self.assertTrue(a.closed)                 # 没人用的旧流立即关
+        self.assertFalse(busy.closed)             # 还有客户端的不动
+        self.assertEqual(hub.active(), 2)
+        for x in (busy, b):
+            hub.release(x)
+        with hub.lock:
+            self.assertEqual(len(hub.timers), 2)  # 每个 key 一个计时器
+        hub.release(b)                            # 重复 release 不叠计时器
+        with hub.lock:
+            self.assertEqual(len(hub.timers), 2)
+        for x in (busy, b):
+            x.close()
+
     def test_exit_two_sets_error(self):
         log = logging.getLogger("test")
         bad = [sys.executable, "-c", "import sys;sys.stderr.write('{\"error\":\"unknown_names\"}\\n');sys.exit(2)"]

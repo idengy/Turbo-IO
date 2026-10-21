@@ -226,6 +226,17 @@ class StreamHub:
                 t.cancel()
             s = self.streams.get(key)
             if s is None or s.closed:
+                # 2026-10-21 审查:换合约时别让没人用的旧子进程再挂 idle 秒——天勤免费账号并发会话有限(另有 kb quotes 在用)
+                for k, other in list(self.streams.items()):
+                    with other.cond:
+                        idle = other.clients == 0
+                    if k != key and idle:
+                        t = self.timers.pop(k, None)
+                        if t:
+                            t.cancel()
+                        del self.streams[k]
+                        other.close()
+                        self.log.info("stream closed (superseded) names=%s", ",".join(other.names))
                 s = Stream(self.cmd, self.cwd, names, self.log)
                 self.streams[key] = s
             with s.cond:
@@ -252,6 +263,9 @@ class StreamHub:
             self.log.info("stream closed (idle) names=%s", ",".join(s.names))
 
         with self.lock:
+            old = self.timers.pop(key, None)  # 同一 key 只留一个回收计时器
+            if old:
+                old.cancel()
             t = threading.Timer(self.idle, reap)
             t.daemon = True
             self.timers[key] = t

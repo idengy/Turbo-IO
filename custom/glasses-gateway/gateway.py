@@ -242,6 +242,8 @@ class Handler(BaseHTTPRequestHandler):
                     if stream.version == sent_version and stream.error is None:
                         stream.cond.wait(timeout=1.0)
                     version, rows, error = stream.version, dict(stream.latest), stream.error
+                if self._peer_gone():  # 2026-10-21 审查:写失败要等第二次写,最多拖 10–20 s;每轮查一次,客户端计数与子进程回收跟得上
+                    raise ConnectionResetError
                 now = time.time()
                 if error is not None:
                     self._write_chunk(("data: " + json.dumps({"type": "error", "message": error}, ensure_ascii=False) + "\n\n").encode())

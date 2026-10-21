@@ -21,7 +21,7 @@ public final class WatchController {
     static final int MAX_NAMES=12; // r10:12 行最长约 300 字节 < NavGlasses 384 字节 clip;网关 watch.MAX_NAMES、kb stream MAX_SYMBOLS 同为 12
     private static Context app;private static SharedPreferences prefs;
     // 完整模式
-    private static long epoch;private static boolean running,renewing;private static long sessionStart,closeAt,lastData;private static int attempt;
+    private static volatile long epoch;private static volatile boolean running;private static boolean renewing,voicePending;private static long sessionStart,closeAt,lastData;private static int attempt;
     private static String note="未开始",lastText="",streamUrl="";
     /** 当前任务:「盯盘」或「背单词」(bill 分支 2026-10-20):两者共用同一个 SSE→面板壳,只差流地址与文案。 */
     static String task="盯盘";private static volatile HttpURLConnection connection;private static boolean leased;
@@ -165,33 +165,38 @@ public final class WatchController {
         return null;
     }
     static void stop(String reason){
-        boolean was=running;running=false;renewing=false;epoch++;MAIN.removeCallbacks(tick);
+        boolean was=running,probe=!mode.isEmpty();running=false;renewing=false;voicePending=false;epoch++;MAIN.removeCallbacks(tick);
         final HttpURLConnection c=connection;connection=null;if(c!=null){Thread t=new Thread(c::disconnect,"TurboIO-watch-close");t.setDaemon(true);t.start();}
         if(!mode.isEmpty())mode="";
+        // 2026-10-21 审查:只关自己开的会话。MusicPlayer.background() 等处在未运行时也会调 stop,原来会顺手关掉云端字幕/导航的显示
+        if(!was&&!probe)return;
         if(NavGlasses.active())NavGlasses.closeAuto();
         if(was)BackgroundWork.release(task);
         note=reason;
     }
     /** 语音「开始盯盘」:先校验,再延迟 1.5 s 真正开始(让官方回答区先关闭);返回给眼镜说的话。 */
     static String voiceStart(){
-        if(running){MAIN.postDelayed(()->restart(),1500);return "盯盘重新投到眼镜";}
+        if(voicePending)return "盯盘正在开始";  // 2026-10-21 审查:1.5 s 内连说两次会把刚开的会话重开一次
+        if(running){voicePending=true;MAIN.postDelayed(()->{voicePending=false;restart();},1500);return "盯盘重新投到眼镜";}
         String why=precheck();if(why!=null)return why;
-        MAIN.postDelayed(()->{String r=start();if(r!=null)note="语音开始失败："+r;},1500);
+        voicePending=true;MAIN.postDelayed(()->{if(!voicePending)return;voicePending=false;String r=start();if(r!=null)note="语音开始失败："+r;},1500);
         return "盯盘已开始，手机可切换品种";
     }
     static String voiceStop(){return voiceStop("盯盘");}
     static String voiceStopWords(){return voiceStop("背单词");}
-    private static String voiceStop(String t){if(!running)return "当前没有在"+t;MAIN.postDelayed(()->stop("语音停止"),300);return task+"已停止";}
+    private static String voiceStop(String t){if(!running&&voicePending){voicePending=false;return "已取消开始"+t;}if(!running)return "当前没有在"+t;MAIN.postDelayed(()->stop("语音停止"),300);return task+"已停止";}
     /** 语音「开始背单词」:用手机上设好的秒数与顺序。 */
     static String voiceStartWords(){
+        if(voicePending)return "背单词正在开始";
         String why=precheck(true);if(why!=null)return why;
-        MAIN.postDelayed(()->{String r=startWords(wordsSeconds(),wordsShuffle());if(r!=null)note="语音开始失败："+r;},1500);
+        voicePending=true;MAIN.postDelayed(()->{if(!voicePending)return;voicePending=false;String r=startWords(wordsSeconds(),wordsShuffle());if(r!=null)note="语音开始失败："+r;},1500);
         return "背单词已开始，手机可调节奏";
     }
 
     private static void spawn(final long e,final String key){
         Thread t=new Thread(()->{HttpURLConnection http=null;String why="流已结束";
             try{http=(HttpURLConnection)new URL(streamUrl).openConnection();connection=http;
+                if(e!=epoch)return;  // 2026-10-21 审查:建连期间已停止/重开,别把旧连接留给 stop() 之外
                 http.setConnectTimeout(15000);http.setReadTimeout(30000);http.setInstanceFollowRedirects(false);
                 http.setRequestProperty("Authorization","Bearer "+key);http.setRequestProperty("Accept","text/event-stream");
                 int code=http.getResponseCode();if(code!=200)throw new IOException("HTTP "+code);

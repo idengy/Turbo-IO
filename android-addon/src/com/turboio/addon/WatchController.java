@@ -31,7 +31,10 @@ public final class WatchController {
     private static String mode="";private static int offers,seconds;
     private static final double[] price=new double[5];private static final Random random=new Random();
 
-    static void init(Context c){app=c.getApplicationContext();prefs=app.getSharedPreferences("turboio_watch",0);BackgroundWork.register("盯盘",()->stop("从后台通知停止"));BackgroundWork.register("背单词",()->stop("从后台通知停止"));}
+    static void init(Context c){app=c.getApplicationContext();prefs=app.getSharedPreferences("turboio_watch",0);BackgroundWork.register("盯盘",()->stop("从后台通知停止"));BackgroundWork.register("背单词",()->stop("从后台通知停止"));
+        // r21(2026-10-21):眼镜长按退出字幕面板 → 启动器报 glass_preview aiSubtitle action=2 → 等同手机「停止」,释放会话与后台租约。
+        // 只认 ready 且不在续期:续期自己发的 type3 也会让固件报 action=2;starting 期间的迟到帧同样忽略。
+        NativeTransfer.receive((peer,bytes)->{if(running&&!renewing&&NavGlasses.phase().equals("ready")&&WatchSession.subtitleExit(bytes))stop("眼镜长按退出，已停止"+task);});}
     // ---- 背单词设置(每帧秒数、随机顺序;排版与词库都在网关) ----
     static int wordsSeconds(){return prefs.getInt("words_seconds",6);}
     static void wordsSeconds(int s){prefs.edit().putInt("words_seconds",s).apply();}

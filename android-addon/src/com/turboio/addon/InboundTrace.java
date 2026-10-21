@@ -47,7 +47,8 @@ final class InboundTrace {
   StringBuilder s=new StringBuilder("type="+type);if(bin>0)s.append(" bin=").append(bin);
   if(json==null)return s.toString();
   java.util.regex.Matcher m=CMD.matcher(json);s.append(" cmd=").append(m.find()?m.group(1):"?");
-  return s.append(' ').append(clip(compact(json),200)).toString();
+  String c=compact(json).replaceAll("\"SN\"\\s*:\\s*\"[^\"]*\"","\"SN\":\"…\"");
+  return s.append(' ').append(clip(c,c.contains("analytics_log")?600:200)).toString();
  }catch(Exception e){return null;}}
  private static final java.util.regex.Pattern CMD=java.util.regex.Pattern.compile("\"cmd\"\\s*:\\s*\"([^\"]{0,40})\"");
  static String compact(String json){return json.replace("\\\"","\"").replaceAll("\\s+"," ").replace("\u0000","");}

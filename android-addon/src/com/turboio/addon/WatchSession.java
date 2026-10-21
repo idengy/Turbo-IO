@@ -34,4 +34,35 @@ public final class WatchSession {
     }
 
     public static boolean stale(long now, long lastData) { return lastData > 0 && now - lastData >= STALE; }
+
+    /** r21(2026-10-21 r20 实机):眼镜长按退出字幕面板时,启动器(业务 15)发 type 24 `glass_preview`,
+     *  data 里 app.name=com.rayneo.liteos.aiSubtitle、action=2(开面板时同一条 action=1,回主屏另有 scence=0)。
+     *  帧 = protobuf{1 版本,2 类型,3 JSON,4 二进制};data 是转义过的 JSON 字符串,先去转义再匹配。 */
+    public static boolean subtitleExit(byte[] frame) {
+        String json = launcherJson(frame, 24);
+        if (json == null) return false;
+        String j = json.replace("\\\"", "\"");
+        return j.matches("(?s).*\"cmd\"\\s*:\\s*\"glass_preview\".*")
+            && j.matches("(?s).*\"name\"\\s*:\\s*\"com\\.rayneo\\.liteos\\.aiSubtitle\".*")
+            && j.matches("(?s).*\"action\"\\s*:\\s*2(?![0-9]).*");
+    }
+    /** 取业务 15 帧里 type == want 的 JSON;格式不对或类型不符返回 null。 */
+    static String launcherJson(byte[] b, long want) {
+        if (b == null || b.length > 8192) return null;
+        try {
+            int[] p = {0}; long type = -1; String json = null;
+            while (p[0] < b.length) {
+                long k = var(b, p); int tag = (int) (k >>> 3), wire = (int) (k & 7);
+                if (wire == 2) { int n = (int) var(b, p); if (n < 0 || n > b.length - p[0]) return null; if (tag == 3) json = new String(b, p[0], n, "UTF-8"); p[0] += n; }
+                else if (wire == 0) { long v = var(b, p); if (tag == 2) type = v; }
+                else return null;
+            }
+            return type == want ? json : null;
+        } catch (Exception e) { return null; }
+    }
+    private static long var(byte[] b, int[] p) {
+        long n = 0;
+        for (int i = 0; i < 10; i++) { if (p[0] >= b.length) throw new IllegalArgumentException(); int c = b[p[0]++] & 255; n |= (long) (c & 127) << (7 * i); if ((c & 128) == 0) return n; }
+        throw new IllegalArgumentException();
+    }
 }

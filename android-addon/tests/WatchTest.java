@@ -7,6 +7,11 @@ import com.turboio.addon.WatchVoice.Command;
 public final class WatchTest {
     private static int checks;
     private static void check(boolean v) { if (!v) throw new AssertionError("check " + checks); checks++; }
+    static byte[] launcher(int type, String json) {
+        byte[] j = json.getBytes(java.nio.charset.StandardCharsets.UTF_8); java.io.ByteArrayOutputStream o = new java.io.ByteArrayOutputStream();
+        o.write(8); o.write(1); o.write(16); o.write(type); o.write(26); int n = j.length; while (n >= 128) { o.write((n & 127) | 128); n >>>= 7; } o.write(n); o.write(j, 0, j.length);
+        return o.toByteArray();
+    }
     public static void main(String[] a) {
         // 状态机:正常运行
         check(WatchSession.onTick(1000, 0, "starting", false, 0) == Act.NONE);
@@ -63,6 +68,14 @@ public final class WatchTest {
         check(WatchVoice.match("停止定盘") == Command.STOP && WatchVoice.match("关掉订牌") == Command.STOP);
         check(WatchVoice.match("开始北单词") == Command.START_WORDS && WatchVoice.match("停止倍单词") == Command.STOP_WORDS);
         check(WatchVoice.match("帮我定盘一下螺纹") == Command.NONE && WatchVoice.match("定盘") == Command.NONE);
+        // r21 长按退出:r20 实机两条 glass_preview(开 action=1 / 退 action=2)与回主屏 scence=0
+        check(WatchSession.subtitleExit(launcher(24, "{\"cmd\":\"glass_preview\",\"payload\":{\"value\":0,\"mode\":0,\"data\":\"{\\\"scence\\\":2,\\\"app\\\":{\\\"name\\\":\\\"com.rayneo.liteos.aiSubtitle\\\",\\\"action\\\":2}}\"}}")));
+        check(!WatchSession.subtitleExit(launcher(24, "{\"cmd\":\"glass_preview\",\"payload\":{\"value\":0,\"mode\":0,\"data\":\"{\\\"scence\\\":2,\\\"app\\\":{\\\"name\\\":\\\"com.rayneo.liteos.aiSubtitle\\\",\\\"action\\\":1}}\"}}")));
+        check(!WatchSession.subtitleExit(launcher(24, "{\"cmd\":\"glass_preview\",\"payload\":{\"value\":0,\"mode\":0,\"data\":\"{\\\"scence\\\":0,\\\"index\\\":1}\"}}")));
+        check(!WatchSession.subtitleExit(launcher(24, "{\"cmd\":\"glass_preview\",\"payload\":{\"data\":\"{\\\"app\\\":{\\\"name\\\":\\\"com.rayneo.liteos.weread\\\",\\\"action\\\":2}}\"}}")));
+        check(!WatchSession.subtitleExit(launcher(76, "{\"cmd\":\"glass_preview\",\"payload\":{\"data\":\"{\\\"app\\\":{\\\"name\\\":\\\"com.rayneo.liteos.aiSubtitle\\\",\\\"action\\\":2}}\"}}")));
+        check(!WatchSession.subtitleExit(launcher(24, "{\"cmd\":\"glass_preview\",\"payload\":{\"data\":\"{\\\"app\\\":{\\\"name\\\":\\\"com.rayneo.liteos.aiSubtitle\\\",\\\"action\\\":21}}\"}}")));
+        check(!WatchSession.subtitleExit(new byte[]{8, 1, 16}) && !WatchSession.subtitleExit(null));
         System.out.println("PASS " + checks + " watch checks");
     }
 }

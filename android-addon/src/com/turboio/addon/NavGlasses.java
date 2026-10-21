@@ -118,9 +118,9 @@ public final class NavGlasses {
             {int t=e.type>=0&&e.type<16&&(e.type==3||e.type==4||e.type==8)?e.type:0;inbound[t]++;String sidIn=e.type==4?"":new JSONObject(e.json).optString("sid");lastInbound="t"+e.type+(e.type==4?"":sidIn.equals(sid)?"(本会话)":"(他会话)")+" "+(e.type==4?"":e.json.length()>60?e.json.substring(0,60):e.json);}
             // Audio bodies are not retained, parsed or uploaded.
             final JSONObject j=e.type==4?new JSONObject():new JSONObject(e.json);
-            MAIN.post(()->{if(!device.equals(d))return;if(e.type==4){halt();return;}if(!sid.equals(j.optString("sid")))return;
+            MAIN.post(()->{if(!device.equals(d))return;if(e.type==4){if(!phase.equals("stopping"))exitedByGlasses();return;}  /* 2026-10-21 r27:官方实时字幕/同传接管时眼镜回传音频(t4):面板已被接管,本地直接 idle,不再发 type3 等回执(原 halt 落 uncertain) */if(!sid.equals(j.optString("sid")))return;
                 if(e.type==8&&phase.equals("starting")){Object code=j.opt("code");if(code instanceof Number&&(((Number)code).doubleValue()==1||((Number)code).doubleValue()==2))mark("ready","眼镜已确认显示配置 · 文字可见性待验收");else halt();}
-                if(e.type==3){glassClosed++;if(phase.equals("stopping"))mark("stopping","眼镜已回执本会话关闭（t3）");else halt();}
+                if(e.type==3){glassClosed++;if(phase.equals("stopping"))mark("stopping","眼镜已回执本会话关闭（t3）");else exitedByGlasses();}
             });
         }catch(Exception ignored){}
     }

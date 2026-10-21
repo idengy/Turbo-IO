@@ -36,10 +36,14 @@ public final class WatchController {
         // 只认 ready 且不在续期:续期自己发的 type3 也会让固件报 action=2;starting 期间的迟到帧同样忽略。
         // r24:install() 每次宿主 Activity 重建(折叠屏开合等)都会调 init,监听只注册一次——r22/r23 实机重复注册 4 份,转一格回退 4 个词
         if(listening)return;listening=true;
-        NativeTransfer.receive((peer,bytes)->{if(!running||renewing||!NavGlasses.phase().equals("ready"))return;
-            if(WatchSession.subtitleExit(bytes)){stop("眼镜已退出面板（长按或官方字幕接管），已停止"+task,true);return;}
+        NativeTransfer.receive((peer,bytes)->{String ph=NavGlasses.phase();
+            // r27 兜底:未运行但会话卡在 uncertain/stopping 时,眼镜报告字幕面板退出(含关闭官方实时字幕)= 面板确实已关,解除占用
+            if(!running&&(ph.equals("uncertain")||ph.equals("stopping"))&&WatchSession.subtitleExit(bytes)){NavGlasses.exitedByGlasses();return;}
+            if(!running||renewing)return;
+            // r27:面板退出信号在 stopping(已被 t3/t4 触发停止)时也收——否则卡在等回执、落 uncertain
+            if((ph.equals("ready")||ph.equals("stopping"))&&WatchSession.subtitleExit(bytes)){stop("眼镜已退出面板（长按或官方字幕接管），已停止"+task,true);return;}
             // r22:背单词时转旋钮(任一方向)= 回上一个词,网关停留 BACK_PAUSE 秒后接着放新词
-            if(task.equals("背单词")&&WatchSession.wheelScroll(bytes))wordsBack();});}
+            if(ph.equals("ready")&&task.equals("背单词")&&WatchSession.wheelScroll(bytes))wordsBack();});}
     private static int backs;private static boolean listening;private static long lastBack;
     /** 通知网关回看;失败只记在状态行,不影响流。 */
     private static void wordsBack(){

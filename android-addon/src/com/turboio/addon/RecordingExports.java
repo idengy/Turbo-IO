@@ -18,9 +18,13 @@ final class RecordingExports {
     static void show(Activity activity, boolean text) {
         Toast.makeText(activity,"正在查找本机已保存文件",Toast.LENGTH_SHORT).show();
         new Thread(() -> {
-            List<File> files = new ArrayList<>(); Set<String> seen = new HashSet<>(); int[] budget = {3000};
+            List<File> files = new ArrayList<>(); Set<String> seen = new HashSet<>(); int[] budget = {30000};
+            // bill 分支(2026-10-21):1.0.6 在 files/ 与 app_flutter/ 里扫不到录音(官方代码里录音是 .opus、目录名 audio/recordSync|recordTemp),
+            // 改为扫整个私有数据目录(含内部 cache)与外部 Android/data/<包名>,列表显示相对路径,用来定位录音实际存放处
+            File data = new File(activity.getApplicationInfo().dataDir), external = activity.getExternalFilesDir(null);
+            File externalRoot = external == null ? null : external.getParentFile();
             try {
-                for(File root : new File[]{activity.getFilesDir(), new File(activity.getApplicationInfo().dataDir,"app_flutter"), activity.getExternalFilesDir(null)})
+                for(File root : new File[]{data, externalRoot})
                     scan(root, 0, text, files, seen, budget);
             } catch (IOException ignored) {}
             files.sort((a,b)->Long.compare(b.lastModified(),a.lastModified()));
@@ -30,7 +34,7 @@ final class RecordingExports {
                     .setMessage("请先在官方 App 保存或下载录音。此处仅查本机文件，不代表云端没有记录；数据库内的转写还需单独适配。").setPositiveButton("知道了",null).show(); return; }
                 SimpleDateFormat format = new SimpleDateFormat("MM-dd HH:mm",Locale.ROOT);
                 String[] rows = new String[files.size()];
-                for(int i=0;i<rows.length;i++) { File file=files.get(i); rows[i]=file.getName()+"\n"+format.format(new Date(file.lastModified()))+" · "+file.length()/1024+" KB"; }
+                for(int i=0;i<rows.length;i++) { File file=files.get(i); rows[i]=file.getName()+"\n"+relative(file.getParentFile(),data,externalRoot)+" · "+format.format(new Date(file.lastModified()))+" · "+file.length()/1024+" KB"; }
                 new AlertDialog.Builder(activity).setTitle(text?"本地文字 / Markdown 文件":"本地音频候选（录音 / 智记）")
                     .setItems(rows,(d,which)->new AlertDialog.Builder(activity).setTitle("分享所选文件？")
                         .setMessage("仅导出本机副本，不删除原件。请确认这是你要分享的记录。")
@@ -40,18 +44,25 @@ final class RecordingExports {
         },"TurboIO-file-list").start();
     }
     private static void scan(File node,int depth,boolean text,List<File> out,Set<String> seen,int[] budget) throws IOException {
-        if(node==null || depth>9 || budget[0]--<=0 || out.size()>=200 || !node.exists()) return;
+        if(node==null || depth>12 || budget[0]--<=0 || out.size()>=300 || !node.exists()) return;
         if(!node.getAbsolutePath().equals(node.getCanonicalPath())) return; // no symlinks
         if(!seen.add(node.getCanonicalPath())) return;
         if(node.isDirectory()) {
-            String name=node.getName(); if(name.equals("flutter_assets")||name.equals("logs")||name.equals("databases")) return;
+            String name=node.getName(); if(name.equals("flutter_assets")||name.equals("logs")||name.equals("databases")||name.equals("code_cache")||name.equals("app_webview")||name.equals("lib")||name.equals("shared_prefs")) return;
             File[] children=node.listFiles(); if(children!=null) for(File child:children) scan(child,depth+1,text,out,seen,budget);
         } else if(node.isFile() && node.length()>0) {
             String name=node.getName().toLowerCase(Locale.ROOT), path=node.getPath().toLowerCase(Locale.ROOT);
             boolean audio=name.matches(".*\\.(m4a|wav|aac|ogg|opus|mp3|flac)$");
             boolean document=name.endsWith(".md") || (name.endsWith(".txt") && (path.contains("record")||path.contains("transcript")||path.contains("lifelog")||path.contains("always")));
-            if(text?document:audio) out.add(node);
+            if((text?document:audio) && !name.startsWith("turboio-")) out.add(node);  // 跳过本页分享时自己拷到 cache/share_plus 的副本
         }
+    }
+    /** 所在目录相对私有数据目录(data/…)或外部目录(ext/…)的路径,列表里定位录音用。 */
+    private static String relative(File dir,File data,File external){
+        String d=dir==null?"":dir.getAbsolutePath();
+        if(data!=null&&d.startsWith(data.getAbsolutePath()))return "data"+d.substring(data.getAbsolutePath().length());
+        if(external!=null&&d.startsWith(external.getAbsolutePath()))return "ext"+d.substring(external.getAbsolutePath().length());
+        return d;
     }
     static void share(Activity activity,File original,String mime) {
         new Thread(() -> {

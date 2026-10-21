@@ -148,3 +148,15 @@
 - **插件用法(r11)**:`TurboAddon.localFinal` 终态后,若官方原件 next=true,800 ms 后反射调 `s(null,true,false)`;外层 `p8/c` 实例从监听器内部类字段取(`p8/c$c.a`,按「字段类型有 s(String,Z,Z)」找,不钉字段名)。实机:语音框 2–3 s 关、业务 19 面板不受 phone_exit 影响。
 - **其他可复用事实**:`p8/c$c.onNlpResult` 把 NlpResult 包成 `SkillPayloadTransportPayload` 发眼镜(sub 为 llm/rayclaw 或含 chat 走 `l8/M0.c` 合并路径,否则 `rayneo_venus_sdk_plugin/e.m` 即时路径);`finished && !r8/a.g()` 记「无扬声器链路以NLP final作为完成信号」只置标志;`onResponseComplete` 只对 RayClaw 链路发 0x0C;`onVadStatusChange`「VAD超时,发送 timeout exit」。宿主 `VA_TRACE` 日志(`l8/Y0.d`)不进 logcat。
 
+
+## 眼镜按键与字幕面板退出会报给手机什么(2026-10-21,r19/r20 入站记录实测,固件 Strix OS 1.0.5.5 + TMIG1)
+
+方法:插件临时记录会话期间宿主送来的全部事件(`NativeTransfer.event` 入口,任何业务),Bill 逐个动作记时间对照;诊断代码 r23 后已删,结论如下。
+
+- **业务 19(AI_SUBTITLE,盯盘/背单词用的纯显示字幕通道)**:每次开会话只回一条 t8 code 1(握手),之后长按、短按、转旋钮都**不回任何帧**——P0-6「长按只有 t8」就是这个开头的握手。官方实时字幕/同传接管时会有 t4(眼镜回传音频)。
+- **业务 15(LAUNCHER,启动器)才是信号来源**,帧 = protobuf{1 版本, 2 类型, 3 JSON, 4 二进制},JSON 的 `cmd` 区分:
+  - **type 24 `glass_preview`**:`data` 是转义 JSON。字幕面板打开 `{"scence":2,"app":{"name":"com.rayneo.liteos.aiSubtitle","action":1}}`,退出 `action:2`(长按退出、官方字幕接管、关闭官方字幕都会发),回主屏另有 `{"scence":0,"index":1}`。插件用 action=2 判定「面板已退出」(`WatchSession.subtitleExit`)。
+  - **type 76 `analytics_log`**:固件埋点。字幕面板上转旋钮**每格一条** `extras.action_type=scroll`(面板无历史时 `action_result=fail`、`history_depth=0`),**前转后转内容完全相同,分不出方向**(`WatchSession.wheelScroll`)。按住长按期间另有一条 `packageName=com.rayneo.liteos.state_machine` 的埋点。埋点里带眼镜 SN 等标识,记录/外发要遮挡。
+  - 其他常见:type 19 `stock_request/stock_update`(官方股票组件)、type 3 `screen_status`、`brightness_change`。
+- **短按**:字幕面板上短按**不产生任何入站**,手机无法感知。
+- **坑**:`TurboAddon.install` 每次宿主 Activity 重建(X Fold 开合屏)都会调各模块 `init`;往 `NativeTransfer.receive` 注册监听必须防重,否则一条消息被处理多份(r22/r23 转一格回退 4 个词)。

@@ -9,6 +9,8 @@ import json
 import logging
 import os
 import re
+import select
+import socket
 import subprocess
 import sys
 import threading
@@ -235,12 +237,16 @@ class Handler(BaseHTTPRequestHandler):
 
     def _words(self, seconds: int, order: str, probe: bool):
         """背单词 SSE:每 `seconds` 一帧;一个词多帧时逐帧发完再取下一个词;probe=1 循环发标尺帧不动游标;
-        词库空发 error 后关;两帧间隔 >HEARTBEAT 时补 `: hb` 心跳。"""
+        词库空发 error 后关;两帧间隔 >HEARTBEAT 时补 `: hb` 心跳。
+        2026-10-21:开始时先重放上次最后显示的词;游标在词的第一帧送出后才提交,等待期间每秒查客户端是否已断,
+        断了就不再取词——手机停止不再白白吃掉一个没上镜的词。"""
         log.info("words start seconds=%d order=%s probe=%s", seconds, order, probe)
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream"); self.send_header("Cache-Control", "no-cache")
         self.send_header("Transfer-Encoding", "chunked"); self.end_headers()
         pending: list[tuple[str, int, int]] = []  # (text, index, total)
+        commit: dict | None = None  # 当前词的游标改动,第一帧送出后提交
+        replay = not probe
         rulers = words.ruler_frames()
         try:
             while True:
@@ -250,19 +256,33 @@ class Handler(BaseHTTPRequestHandler):
                     else:
                         try:
                             with self.deck_lock:
-                                entry, index, total = self.deck.next(order)
+                                got = self.deck.resume() if replay else None
+                                if got is None:
+                                    entry, index, total, commit = self.deck.peek(order)
+                                else:
+                                    entry, index, total = got
+                                    log.info("words replay %s", entry.get("word"))
                         except LookupError as e:
                             self._write_chunk(("data: " + json.dumps({"type": "error", "message": str(e)}, ensure_ascii=False) + "\n\n").encode())
                             break
+                        replay = False
                         pending = [(fr, index, total) for fr in words.layout(entry)]
                 text, index, total = pending.pop(0)
+                if self._peer_gone():
+                    raise ConnectionResetError
                 self._write_chunk(("data: " + json.dumps({"type": "panel", "text": text, "index": index, "total": total}, ensure_ascii=False) + "\n\n").encode())
-                waited = 0.0
+                if commit is not None:
+                    with self.deck_lock:
+                        self.deck.commit(commit)
+                    commit = None
+                waited = since_hb = 0.0
                 while waited < seconds:
-                    step = min(words.HEARTBEAT, seconds - waited)
-                    time.sleep(step); waited += step
-                    if waited < seconds:
-                        self._write_chunk(b": hb\n\n")
+                    step = min(1.0, seconds - waited)
+                    time.sleep(step); waited += step; since_hb += step
+                    if self._peer_gone():
+                        raise ConnectionResetError
+                    if since_hb >= words.HEARTBEAT and waited < seconds:
+                        self._write_chunk(b": hb\n\n"); since_hb = 0.0
             self.wfile.write(b"0\r\n\r\n"); self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError, TimeoutError):
             log.info("words client went away")
@@ -314,6 +334,14 @@ class Handler(BaseHTTPRequestHandler):
         chunk({}, "stop")
         self._write_chunk(b"data: [DONE]\n\n")
         self.wfile.write(b"0\r\n\r\n"); self.wfile.flush()
+
+    def _peer_gone(self) -> bool:
+        """客户端是否已关连接(可读且 recv 0 字节 = 对端 FIN)。写入本身要等第二次写才报错,靠它发现不了刚断开的连接。"""
+        try:
+            readable, _, _ = select.select([self.connection], [], [], 0)
+            return bool(readable) and self.connection.recv(1, socket.MSG_PEEK) == b""
+        except OSError:
+            return True
 
     def _write_chunk(self, data: bytes):
         self.wfile.write(f"{len(data):x}\r\n".encode() + data + b"\r\n"); self.wfile.flush()

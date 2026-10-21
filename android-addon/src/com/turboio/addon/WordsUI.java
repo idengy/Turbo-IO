@@ -18,7 +18,8 @@ final class WordsUI {
   diag.addView(EditorialUI.text(a,"眼镜循环显示标尺帧（数字 / 字母 / 汉字 / 音标各一行，8 秒换一帧）。数一下每行最后能看清第几个字符、音标符号是否成方块，告诉 Claude 改网关常量即可，不用重装 App。",13,EditorialUI.MUTED));
   EditorialUI.button(a,diag,"开始宽度探针",false,()->run(a,WatchController.startWordsProbe()));
   EditorialUI.button(a,diag,"停止探针",false,()->WatchController.stop("用户停止"));
-  Handler h=new Handler();Runnable tick=new Runnable(){public void run(){if(!s.dialog.isShowing())return;state.setText(NavGlasses.connection()+"\n"+NavGlasses.status()+"\n"+WatchController.status()+(WatchController.lastText().isEmpty()?"":"\n— 最近一帧 —\n"+WatchController.lastText()));h.postDelayed(this,500);}};h.post(tick);
+  WatchUI.traceButtons(a,diag);
+  Handler h=new Handler();Runnable tick=new Runnable(){public void run(){if(!s.dialog.isShowing())return;state.setText(NavGlasses.connection()+"\n"+NavGlasses.status()+"\n"+WatchController.status()+(WatchController.lastText().isEmpty()?"":"\n— 最近一帧 —\n"+WatchController.lastText())+"\n"+InboundTrace.summary(12));h.postDelayed(this,500);}};h.post(tick);
   s.dialog.setOnDismissListener(d->h.removeCallbacks(tick));}
  private static String label(){return "每帧 "+WatchController.wordsSeconds()+" 秒（点按切换 4/6/8/10/15）";}
  private static void run(Activity a,String failure){if(failure!=null)EditorialUI.notice(a,failure);}

@@ -147,6 +147,30 @@ class DeckTest(unittest.TestCase):
         self.assertEqual(sorted(got), ["w0", "w1", "w2", "w3", "w4"])
         self.assertEqual(sorted(d.next("shuffle")[0]["word"] for _ in range(5)), ["w0", "w1", "w2", "w3", "w4"])
 
+    def test_peek_does_not_move_until_commit(self):
+        d = words.Deck(self.root); d.next()  # current = w4
+        e, _, _, pending = d.peek()
+        self.assertEqual(e["word"], "w3")
+        self.assertEqual(words.Deck(self.root).resume()[0]["word"], "w4")  # 没提交:磁盘上仍是 w4
+        d.commit(pending)
+        self.assertEqual(words.Deck(self.root).resume()[0]["word"], "w3")
+        self.assertEqual(d.next()[0]["word"], "w2")
+
+    def test_resume_replays_last_then_continues(self):
+        self.assertIsNone(words.Deck(self.root).resume())  # 从没背过
+        d = words.Deck(self.root); d.next(); d.next()  # current = w3
+        d2 = words.Deck(self.root)
+        self.assertEqual(d2.resume()[0]["word"], "w3")
+        self.assertEqual(d2.next()[0]["word"], "w2")
+
+    def test_shuffle_peek_keeps_remaining_until_commit(self):
+        d = words.Deck(self.root)
+        e, _, _, pending = d.peek("shuffle")
+        self.assertEqual(d.state.get("shuffle_remaining", []), [])
+        d.commit(pending)
+        self.assertEqual(len(d.state["shuffle_remaining"]), 4)
+        self.assertEqual(d.resume()[0]["word"], e["word"])
+
     def test_status(self):
         d = words.Deck(self.root)
         s = d.status()

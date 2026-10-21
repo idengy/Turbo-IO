@@ -51,8 +51,15 @@ final class WatchUI {
   EditorialUI.button(a,diag,"替换/追加探针 · A 帧 4 秒后 B 帧",false,()->run(a,WatchController.startProbe("append")));
   EditorialUI.button(a,diag,"多行探针 · 12 行编号，每 5 秒更新（试滚轮）",false,()->run(a,WatchController.startProbe("lines")));
   EditorialUI.button(a,diag,"停止探针",false,()->WatchController.stop("用户停止"));
-  Handler h=new Handler();Runnable tick=new Runnable(){public void run(){if(!s.dialog.isShowing())return;state.setText(NavGlasses.connection()+"\n"+NavGlasses.status()+"\n"+WatchController.status()+(WatchController.lastText().isEmpty()?"":"\n— 最近一帧 —\n"+WatchController.lastText()));h.postDelayed(this,500);}};h.post(tick);
+  traceButtons(a,diag);
+  Handler h=new Handler();Runnable tick=new Runnable(){public void run(){if(!s.dialog.isShowing())return;state.setText(NavGlasses.connection()+"\n"+NavGlasses.status()+"\n"+WatchController.status()+(WatchController.lastText().isEmpty()?"":"\n— 最近一帧 —\n"+WatchController.lastText())+"\n"+InboundTrace.summary(12));h.postDelayed(this,500);}};h.post(tick);
   s.dialog.setOnDismissListener(d->h.removeCallbacks(tick));}
+ /** r19 诊断:入站记录复制 / 清空(盯盘页、背单词页共用)。 */
+ static void traceButtons(Activity a,LinearLayout card){
+  card.addView(EditorialUI.text(a,"入站记录(r19):会话期间眼镜发来的每个事件带时间记在状态行下方。测法:开始后分别长按、短按、转旋钮,每次隔 5 秒以上,记下按的时间,再点复制发给 Claude。",14,EditorialUI.MUTED));
+  EditorialUI.button(a,card,"复制入站记录",false,()->{((android.content.ClipboardManager)a.getSystemService(android.content.Context.CLIPBOARD_SERVICE)).setPrimaryClip(android.content.ClipData.newPlainText("Turbo IO 入站记录",InboundTrace.dump()));Toast.makeText(a,"已复制",Toast.LENGTH_SHORT).show();});
+  EditorialUI.button(a,card,"清空入站记录",false,InboundTrace::clear);
+ }
  private static void run(Activity a,String failure){if(failure!=null)EditorialUI.notice(a,failure);}
  /** 列表行上的小动作按钮(↑ ↓ 移除);disabled 时变灰且不响应。 */
  private static TextView act(Activity a,String label,boolean enabled,android.view.View.OnClickListener l){TextView t=EditorialUI.text(a,label,16,enabled?EditorialUI.LIME:EditorialUI.MUTED);t.setPadding(EditorialUI.dp(a,12),EditorialUI.dp(a,8),EditorialUI.dp(a,8),EditorialUI.dp(a,8));if(enabled)t.setOnClickListener(l);return t;}

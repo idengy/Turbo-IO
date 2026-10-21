@@ -1,7 +1,7 @@
 """背单词(2026-10-20):有道单词本 → 眼镜业务 19 文字面板的排版与牌组。纯标准库,无 Android/网络依赖,可直接单测。
 
 词库 `local/words/wordbook.json`(youdao_sync.py 产出):[{id, word, phonetic, trans:[…], book, added}]
-游标 `local/words/state.json`:{"current_id": …, "position": n, "shuffle_remaining": [...]}
+游标 `local/words/state.json`:{"current_id": …, "position": n, "shuffle_remaining": [...]};current_id = 最后送上眼镜的词,下次开始先重放它
 面板约束(P0 实测):字号 2 每行 19 个汉字格、最多 5 行、整屏替换、≤384 字。英文每格几个字符未量,先按 ASCII_PER_CELL=2,探针后改这里即可,不用重打 APK。"""
 from __future__ import annotations
 
@@ -204,6 +204,12 @@ class Deck:
     # 取词
     def next(self, order: str = "seq") -> tuple[dict, int, int]:
         """返回 (词条, 该词在顺序表中的序号(1 起), 总数) 并把游标推到它后面。空词库抛 LookupError。"""
+        entry, index, n, pending = self.peek(order)
+        self.commit(pending)
+        return entry, index, n
+
+    def peek(self, order: str = "seq") -> tuple[dict, int, int, dict]:
+        """同 next 但不动游标,多返回待提交的游标改动;词真正送到眼镜后再 commit(2026-10-21:停止时取出未显示的词不算看过)。"""
         self.load()
         n = len(self.entries)
         if n == 0:
@@ -215,14 +221,26 @@ class Deck:
                 random.shuffle(remaining)
             chosen = remaining.pop()
             idx = next((i for i, e in enumerate(self.entries) if e.get("id") == chosen), 0)
-            self.state["shuffle_remaining"] = remaining
+            pending = {"shuffle_remaining": remaining}
         else:
             idx = self.state.get("position", 0) % n
-            self.state["position"] = (idx + 1) % n
+            pending = {"position": (idx + 1) % n}
         entry = self.entries[idx]
-        self.state["current_id"] = entry.get("id")
+        pending["current_id"] = entry.get("id")
+        return entry, idx + 1, n, pending
+
+    def commit(self, pending: dict) -> None:
+        self.state.update(pending)
         self._write_state()
-        return entry, idx + 1, n
+
+    def resume(self) -> tuple[dict, int, int] | None:
+        """上次最后显示的词(current_id),不动游标;找不到返回 None。开始背单词时先重放它。"""
+        self.load()
+        cur = self.state.get("current_id")
+        idx = next((i for i, e in enumerate(self.entries) if e.get("id") == cur), None)
+        if cur is None or idx is None:
+            return None
+        return self.entries[idx], idx + 1, len(self.entries)
 
     # 游标文件
     def _read_state(self) -> dict:

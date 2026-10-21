@@ -64,6 +64,7 @@ public final class NativeTransfer {
     /** Called after vendor event delivery. Takes only bounded metadata, not their mutable Map. */
     public static void event(String kind,Map<?,?> data){
         try{EntryProbe.event(kind,data);}catch(RuntimeException ignored){}
+        try{InboundTrace.event(kind,data);}catch(RuntimeException ignored){}
         try{NavGlasses.event(kind,data);}catch(RuntimeException ignored){}
         if(data==null||kind==null||QUEUED.get()>=128)return;
         try{if(kind.equals("messageReceived")){Object raw=data.get("message");if(!(raw instanceof Map))return;Map<?,?> m=(Map<?,?>)raw;int biz=HostBusiness.id(m.get("businessId"));lastBusiness=biz;Object payload=m.get("payload");lastBytes=payload instanceof byte[]?((byte[])payload).length:0;if(biz==20){String d=small(m.get("deviceId"),256);Object raw20=m.get("payload");if(!d.isEmpty()&&raw20 instanceof byte[]&&((byte[])raw20).length<=8192){byte[] b20=((byte[])raw20).clone();post(()->NewsTele.receive(d,b20));}return;}if(biz!=15)return;String d=small(m.get("deviceId"),256);Object rawBytes=m.get("payload");if(d.isEmpty()||!(rawBytes instanceof byte[])||((byte[])rawBytes).length>8192)return;byte[] b=((byte[])rawBytes).clone();received++;trace("rx business=15 bytes="+b.length+" "+LauncherMeta.describe(b));post(()->{for(Receiver r:new ArrayList<>(receivers)){try{r.message(d,b);}catch(RuntimeException ignored){}}});

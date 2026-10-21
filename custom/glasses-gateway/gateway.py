@@ -124,6 +124,27 @@ def is_quote_question(text: str, quotes: "Quotes") -> bool:
     return bool(quotes.find_names(t)) and len(t) <= 16
 
 
+class WordsControl:
+    """一条背单词流的控制口:/v1/words/back 累加回看次数并唤醒流的等待。"""
+    lock = threading.Lock()
+    live: set = set()
+
+    def __init__(self):
+        self.event = threading.Event()
+        self.backs = 0
+
+    def back(self):
+        with WordsControl.lock:
+            self.backs += 1
+        self.event.set()
+
+    def take(self) -> int:
+        with WordsControl.lock:
+            n, self.backs = self.backs, 0
+            self.event.clear()
+        return n
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     quotes: Quotes = None  # set in main
@@ -138,13 +159,20 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         url = urlsplit(self.path)
         path = url.path.rstrip("/")
-        if path.endswith("/v1/words/status") or path.endswith("/v1/words/stream"):
+        if path.endswith("/v1/words/status") or path.endswith("/v1/words/stream") or path.endswith("/v1/words/back"):
             if not self._authorized():
                 return self._json(401, {"error": {"message": "unauthorized"}})
             query = parse_qs(url.query)
             if path.endswith("/v1/words/status"):
                 with self.deck_lock:
                     return self._json(200, self.deck.status())
+            if path.endswith("/v1/words/back"):  # 眼镜转旋钮(插件转发):正在放的流回上一个词
+                with WordsControl.lock:
+                    live = list(WordsControl.live)
+                for c in live:
+                    c.back()
+                log.info("words back streams=%d", len(live))
+                return self._json(200, {"ok": True, "streams": len(live)})
             return self._words(words.clamp_seconds(query.get("seconds", [""])[0]), "shuffle" if query.get("order", [""])[0] == "shuffle" else "seq",
                                query.get("probe", ["0"])[0] == "1")
         if path.endswith("/v1/watch/names") or path.endswith("/v1/watch/stream") or path.endswith("/v1/watch/resolve"):
@@ -247,13 +275,33 @@ class Handler(BaseHTTPRequestHandler):
         pending: list[tuple[str, int, int]] = []  # (text, index, total)
         commit: dict | None = None  # 当前词的游标改动,第一帧送出后提交
         replay = not probe
+        back_steps = 0  # >0 = 正在回看第几个之前的词;停手 BACK_PAUSE 秒后归 0、接着放新词
         rulers = words.ruler_frames()
+        ctl = WordsControl()
+        with WordsControl.lock:
+            WordsControl.live.add(ctl)
         try:
             while True:
+                backs = 0 if probe else ctl.take()
+                if backs:
+                    with self.deck_lock:
+                        got = None
+                        while backs and got is None:  # 历史不够就退到最早那个
+                            got = self.deck.back_entry(back_steps + backs)
+                            if got is None:
+                                backs -= 1
+                        if got is None and back_steps:  # 已退到最早那个:原地重放并重新计时
+                            got = self.deck.back_entry(back_steps)
+                    if got is not None:
+                        back_steps += backs
+                        entry, index, total = got
+                        pending, commit = [(fr, index, total) for fr in words.layout(entry)], None
+                        log.info("words back %d -> %s", back_steps, entry.get("word"))
                 if not pending:
                     if probe:
                         pending = [(fr, i + 1, len(rulers)) for i, fr in enumerate(rulers)]
                     else:
+                        back_steps = 0
                         try:
                             with self.deck_lock:
                                 got = self.deck.resume() if replay else None
@@ -275,17 +323,24 @@ class Handler(BaseHTTPRequestHandler):
                     with self.deck_lock:
                         self.deck.commit(commit)
                     commit = None
+                # 回看的词最后一帧停 BACK_PAUSE 秒;等待中收到回看立即处理
+                hold = words.BACK_PAUSE if back_steps and not pending else seconds
                 waited = since_hb = 0.0
-                while waited < seconds:
-                    step = min(1.0, seconds - waited)
-                    time.sleep(step); waited += step; since_hb += step
+                while waited < hold:
+                    step = min(1.0, hold - waited)
+                    if ctl.event.wait(step):
+                        break
+                    waited += step; since_hb += step
                     if self._peer_gone():
                         raise ConnectionResetError
-                    if since_hb >= words.HEARTBEAT and waited < seconds:
+                    if since_hb >= words.HEARTBEAT and waited < hold:
                         self._write_chunk(b": hb\n\n"); since_hb = 0.0
             self.wfile.write(b"0\r\n\r\n"); self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError, TimeoutError):
             log.info("words client went away")
+        finally:
+            with WordsControl.lock:
+                WordsControl.live.discard(ctl)
         self.close_connection = True  # 流结束就关,不再按 HTTP/1.1 keep-alive 去读下一请求(客户端早走了,只会刷 reset 栈)
         log.info("words end")
 

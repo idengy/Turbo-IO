@@ -17,6 +17,8 @@ MAX_LINES = 5
 MAX_CHARS = 384       # NavCore.clip 上限
 MIN_SECONDS, MAX_SECONDS, DEFAULT_SECONDS = 3, 60, 6
 HEARTBEAT = 10.0
+BACK_PAUSE = 15        # 眼镜转旋钮回上一个词后停留秒数,期间再转继续往前退;停手满这么久接着放新词(2026-10-21)
+HISTORY = 50           # 回看最多退几个词
 
 # ---------- 音标字形 ----------
 # 2026-10-20 Bill 实机:眼镜字体**没有任何 IPA 字形**(非英文字母的音标符号全是空白),所以音标一律转成 ASCII 近似写法。
@@ -231,7 +233,19 @@ class Deck:
 
     def commit(self, pending: dict) -> None:
         self.state.update(pending)
+        hist = [i for i in self.state.get("history", []) if i != pending.get("current_id")] + [pending.get("current_id")]
+        self.state["history"] = hist[-HISTORY:]  # 最后送上眼镜的在末尾;回看按它倒着走
         self._write_state()
+
+    def back_entry(self, steps: int) -> tuple[dict, int, int] | None:
+        """往回第 steps 个看过的词(1 = 上一个);历史不够或词已从词库删掉返回 None。不动游标。"""
+        self.load()
+        hist = self.state.get("history", [])
+        if steps < 1 or steps >= len(hist):
+            return None
+        want = hist[-1 - steps]
+        idx = next((i for i, e in enumerate(self.entries) if e.get("id") == want), None)
+        return None if idx is None else (self.entries[idx], idx + 1, len(self.entries))
 
     def resume(self) -> tuple[dict, int, int] | None:
         """上次最后显示的词(current_id),不动游标;找不到返回 None。开始背单词时先重放它。"""

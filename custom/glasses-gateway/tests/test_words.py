@@ -171,6 +171,24 @@ class DeckTest(unittest.TestCase):
         self.assertEqual(len(d.state["shuffle_remaining"]), 4)
         self.assertEqual(d.resume()[0]["word"], e["word"])
 
+    def test_back_entry_walks_history(self):
+        d = words.Deck(self.root)
+        for _ in range(3):
+            d.next()  # 看过 w4 w3 w2
+        self.assertEqual(d.back_entry(1)[0]["word"], "w3")
+        self.assertEqual(d.back_entry(2)[0]["word"], "w4")
+        self.assertIsNone(d.back_entry(3)); self.assertIsNone(d.back_entry(0))
+        self.assertEqual(d.next()[0]["word"], "w1")  # 回看不动游标
+        self.assertEqual(words.Deck(self.root).back_entry(1)[0]["word"], "w2")  # 历史持久化
+
+    def test_history_capped_and_deduped(self):
+        d = words.Deck(self.root)
+        for _ in range(12):
+            d.next()
+        h = d.state["history"]
+        self.assertEqual(len(h), len(set(h))); self.assertLessEqual(len(h), words.HISTORY)
+        self.assertEqual(h[-1], d.state["current_id"])
+
     def test_status(self):
         d = words.Deck(self.root)
         s = d.status()

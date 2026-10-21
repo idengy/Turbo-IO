@@ -34,7 +34,18 @@ public final class WatchController {
     static void init(Context c){app=c.getApplicationContext();prefs=app.getSharedPreferences("turboio_watch",0);BackgroundWork.register("盯盘",()->stop("从后台通知停止"));BackgroundWork.register("背单词",()->stop("从后台通知停止"));
         // r21(2026-10-21):眼镜长按退出字幕面板 → 启动器报 glass_preview aiSubtitle action=2 → 等同手机「停止」,释放会话与后台租约。
         // 只认 ready 且不在续期:续期自己发的 type3 也会让固件报 action=2;starting 期间的迟到帧同样忽略。
-        NativeTransfer.receive((peer,bytes)->{if(running&&!renewing&&NavGlasses.phase().equals("ready")&&WatchSession.subtitleExit(bytes))stop("眼镜长按退出，已停止"+task);});}
+        NativeTransfer.receive((peer,bytes)->{if(!running||renewing||!NavGlasses.phase().equals("ready"))return;
+            if(WatchSession.subtitleExit(bytes)){stop("眼镜长按退出，已停止"+task);return;}
+            // r22:背单词时转旋钮(任一方向)= 回上一个词,网关停留 BACK_PAUSE 秒后接着放新词
+            if(task.equals("背单词")&&WatchSession.wheelScroll(bytes))wordsBack();});}
+    private static int backs;
+    /** 通知网关回看;失败只记在状态行,不影响流。 */
+    private static void wordsBack(){
+        final String url,key;try{url=origin()+"/v1/words/back";key=SecretStore.get(app);}catch(Exception e){return;}
+        backs++;note="旋钮回看 ×"+backs;
+        Thread t=new Thread(()->{HttpURLConnection http=null;try{http=(HttpURLConnection)new URL(url).openConnection();http.setConnectTimeout(5000);http.setReadTimeout(5000);http.setInstanceFollowRedirects(false);http.setRequestProperty("Authorization","Bearer "+key);
+            int code=http.getResponseCode();if(code!=200)MAIN.post(()->note="回看失败：HTTP "+code);}catch(Exception e){MAIN.post(()->note="回看失败："+e.getClass().getSimpleName());}finally{if(http!=null)http.disconnect();}},"TurboIO-words-back");
+        t.setDaemon(true);t.start();}
     // ---- 背单词设置(每帧秒数、随机顺序;排版与词库都在网关) ----
     static int wordsSeconds(){return prefs.getInt("words_seconds",6);}
     static void wordsSeconds(int s){prefs.edit().putInt("words_seconds",s).apply();}
@@ -132,7 +143,7 @@ public final class WatchController {
     private static String begin(String t,String key,String first,String n){
         if(!NavGlasses.startCaption(first))return "无法开启眼镜显示："+NavGlasses.status();
         task=t;leased=BackgroundWork.acquire(task,16);InboundTrace.mark("开始 "+t);
-        epoch++;running=true;renewing=false;attempt=0;lastData=0;lastText="";sessionStart=SystemClock.elapsedRealtime();note=n;
+        epoch++;running=true;renewing=false;attempt=0;backs=0;lastData=0;lastText="";sessionStart=SystemClock.elapsedRealtime();note=n;
         final long e=epoch;spawn(e,key);MAIN.removeCallbacks(tick);MAIN.postDelayed(tick,1000);
         return null;
     }

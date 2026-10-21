@@ -46,6 +46,14 @@ public final class WatchSession {
             && j.matches("(?s).*\"name\"\\s*:\\s*\"com\\.rayneo\\.liteos\\.aiSubtitle\".*")
             && j.matches("(?s).*\"action\"\\s*:\\s*2(?![0-9]).*");
     }
+    /** r22(2026-10-21 r21 实机):字幕面板上转旋钮,启动器(业务 15)每格发一条 type 76 `analytics_log`,
+     *  extras.action_type=scroll(面板无历史时 action_result=fail);前转后转内容完全相同,分不出方向。 */
+    public static boolean wheelScroll(byte[] frame) {
+        String json = launcherJson(frame, 76);
+        if (json == null) return false;
+        String j = json.replace("\\\"", "\"");
+        return j.matches("(?s).*\"cmd\"\\s*:\\s*\"analytics_log\".*") && j.matches("(?s).*\"action_type\"\\s*:\\s*\"scroll\".*");
+    }
     /** 取业务 15 帧里 type == want 的 JSON;格式不对或类型不符返回 null。 */
     static String launcherJson(byte[] b, long want) {
         if (b == null || b.length > 8192) return null;

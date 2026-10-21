@@ -76,6 +76,11 @@ public final class WatchTest {
         check(!WatchSession.subtitleExit(launcher(76, "{\"cmd\":\"glass_preview\",\"payload\":{\"data\":\"{\\\"app\\\":{\\\"name\\\":\\\"com.rayneo.liteos.aiSubtitle\\\",\\\"action\\\":2}}\"}}")));
         check(!WatchSession.subtitleExit(launcher(24, "{\"cmd\":\"glass_preview\",\"payload\":{\"data\":\"{\\\"app\\\":{\\\"name\\\":\\\"com.rayneo.liteos.aiSubtitle\\\",\\\"action\\\":21}}\"}}")));
         check(!WatchSession.subtitleExit(new byte[]{8, 1, 16}) && !WatchSession.subtitleExit(null));
+        // r22 旋钮:r21 实机 analytics_log scroll(SN 等字段略)
+        String scroll = "{\"cmd\":\"analytics_log\",\"payload\":{\"value\":0,\"mode\":0,\"data\":\"{\\\"type\\\":\\\"3CE0FD898F\\\",\\\"packageName\\\":\\\"com.rayneo.liteos\\\",\\\"extras\\\":{\\\"action_result\\\":\\\"fail\\\",\\\"action_type\\\":\\\"scroll\\\",\\\"history_depth\\\":0}}\"}}";
+        check(WatchSession.wheelScroll(launcher(76, scroll)) && !WatchSession.wheelScroll(launcher(24, scroll)));
+        check(!WatchSession.wheelScroll(launcher(76, "{\"cmd\":\"analytics_log\",\"payload\":{\"data\":\"{\\\"extras\\\":{\\\"component_type\\\":\\\"Stocks\\\",\\\"refresh_source\\\":\\\"auto\\\"}}\"}}")));
+        check(!WatchSession.subtitleExit(launcher(76, scroll)) && !WatchSession.wheelScroll(null));
         System.out.println("PASS " + checks + " watch checks");
     }
 }

@@ -1,7 +1,8 @@
 # TODO
 
 ## 当前任务
-**r37(2026-10-22)**:问答对话页问题(绿色)也可长按复制。`ChatLogUI` 一行;build/package/guarded/verify exit 0 → **r37 guarded-unsigned `235ba093a9ec37abda3bc51f15e2d1519c952ad47372fe7be36302fcb6185815`**(dex `8a6a593c…`,SUMS 已记;r36 产物改名 `*.r36-20261022`,r35 APK 删)。待 Bill 签名安装验收。
+**r38(2026-10-22 Bill 定:官方助手的问答也要留)**:`TurboAddon.observeOfficial/flushOfficial` + `ChatLog` 来源区分(`OWN`/`OFFICIAL`、`merge`)+ 卡片标来源;含 r37(问题可复制)。ChatLogTest 12 过;build/package/guarded/verify exit 0 → **r38 guarded-unsigned `859c78a0ec149938a15c28a3992220b5c338a20e129466b85933175c29df518a`**(dex `e7ac3694…`,SUMS 已记;r37 `235ba093…` 未装即被取代、作废未留档,r36 产物仍为上一轮留档)。
+- [ ] Bill 签名安装 → 问一句官方会自己答的(如天气)+ 一句走自有模型的 → 问答对话两条都在、标签对;logcat `TurboIOChat` 核对 Query/Answer/Finished 字段语义
 
 **r36(2026-10-22 Bill 定,方案 ~/.claude/plans/tranquil-wishing-shamir.md)**:官方「分享转写」链接 → 网关无头 Chrome 渲染分享页 → md → 插件首页「导出录音转写」生成并系统分享(微信/飞书)。不复刻分享接口签名(安全策略拦下,也不该做)。
 - [x] 网关 `transcript.py` + `/v1/transcript` + 单测 5 过(合成 DOM);已 kickstart。实测 `4egIJUiY` 200(4 大纲 4 段,约 3.6 s)、非分享链接 400、无效短码 422

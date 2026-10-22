@@ -42,6 +42,8 @@ public final class TurboAddon {
     private static SharedPreferences prefs;
     private static Object listener, template;
     private static String question = "", sid = "", emitted = "", lastFinal = "";
+    // bill 分支 r38:官方助手自己回答的轮次也记进问答存档(按会话 id 拼流式片段,Finished 或官方本轮完成时落盘)
+    private static Object officialSource; private static String officialSid = "", officialQ = "", officialA = ""; private static boolean officialDone;
     private static volatile long generation;
     private static volatile HttpURLConnection connection;
     private static boolean owns, done, hasFinal;
@@ -132,10 +134,30 @@ public final class TurboAddon {
         });
     }
     public static void dispatchNlp(Object source,Object response) {
-        serial(() -> { if(!onNlp(source,response)) try {invoke(source,"onNlpResult",response);observeSpeech(source,response);}catch(Exception ignored){diagnostic="官方 NLP 分发失败";} });
+        serial(() -> { if(!onNlp(source,response)) { try {invoke(source,"onNlpResult",response);observeSpeech(source,response);}catch(Exception ignored){diagnostic="官方 NLP 分发失败";} observeOfficial(source,response); } });
     }
     public static void dispatchComplete(Object source) {
-        serial(() -> { if(!onComplete(source)) try {invoke(source,"onResponseComplete");VoiceSpeech.finish(source);}catch(Exception ignored){diagnostic="官方完成分发失败";} });
+        serial(() -> { if(!onComplete(source)) { try {invoke(source,"onResponseComplete");VoiceSpeech.finish(source);}catch(Exception ignored){diagnostic="官方完成分发失败";} if(source==officialSource)flushOfficial("complete"); } });
+    }
+    /** 官方处理的一轮:问题取 Query(空则用本轮 ASR 结果),回答按 ChatLog.merge 拼;设备控制指令(Command 非空)不记。
+     *  日志只记长度与归类,不记内容。 */
+    private static void observeOfficial(Object source,Object response){try{
+        if(get(response,"Command")!=null)return;
+        String s=str(get(response,"SessionId")),q=str(get(response,"Query"));
+        boolean newQuestion=!q.isEmpty()&&!officialQ.isEmpty()&&!q.equals(officialQ);  // 会话 id 为空或复用时,问题变了也算新一轮
+        if(source!=officialSource||!s.equals(officialSid)||newQuestion){flushOfficial("new round");officialSource=source;officialSid=s;officialQ="";officialA="";officialDone=false;}
+        if(officialDone)return;
+        if(!q.isEmpty())officialQ=q;else if(officialQ.isEmpty()&&hasFinal&&s.equals(sid))officialQ=question;
+        String a=str(get(response,"Answer"));if(a.isEmpty())a=str(get(response,"Spoken"));
+        officialA=ChatLog.merge(officialA,a);
+        boolean fin=Boolean.TRUE.equals(get(response,"Finished"));
+        android.util.Log.i("TurboIOChat","official nlp "+safeTag(get(response,"Domain"))+"/"+safeTag(get(response,"Intent"))+" q="+officialQ.length()+" chunk="+a.length()+" a="+officialA.length()+" fin="+fin);
+        if(fin)flushOfficial("finished");
+    }catch(Exception ignored){}}
+    private static void flushOfficial(String why){
+        if(officialDone||officialQ.trim().isEmpty()||officialA.trim().isEmpty())return;
+        officialDone=true;android.util.Log.i("TurboIOChat","official archived ("+why+") q="+officialQ.length()+" a="+officialA.length());
+        archive(officialQ.trim(),officialA.trim(),ChatLog.OFFICIAL);
     }
     private static void observeSpeech(Object source,Object response){try{
         if(!ChatPolicy.eligible(str(get(response,"Domain")),str(get(response,"Intent")),str(get(response,"Sub")),Boolean.TRUE.equals(get(response,"Offline")),get(response,"Command")!=null))return;
@@ -282,7 +304,7 @@ public final class TurboAddon {
             if (finalChunk) {
                 done = true; invoke(listener, "onResponseComplete"); completions++;
                 diagnostic = failure == null ? "回复完成，已交给官方收尾" : "自有请求失败，已收尾";
-                if (failure == null) { HISTORY.append(question, text); archive(question, text); }
+                if (failure == null) { HISTORY.append(question, text); archive(question, text, ChatLog.OWN); }
             }
         } catch (Exception ignored) {
             done = true; diagnostic = "眼镜回调失败，停止本轮";
@@ -393,14 +415,14 @@ public final class TurboAddon {
     /** 问答存档文件;IO 线程写,ChatLogUI 读。 */
     static File conversations() { return new File(new File(app.getFilesDir(), "turboio_android"), "conversations.md"); }
     static java.util.concurrent.Executor io() { return IO; }
-    private static void archive(String input, String answer) {
+    private static void archive(String input, String answer, String source) {
         String stamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT).format(new Date());
         IO.execute(() -> {
             File folder = new File(app.getFilesDir(), "turboio_android");
             if (!folder.isDirectory() && !folder.mkdirs()) return;
             File file = conversations();
             // bill 分支 r35:只留最近 24 小时、循环滚动(原上游 8 MB 后停写),首页「问答对话」查看与分享
-            try { ChatLog.append(file, stamp, input, answer, System.currentTimeMillis()); } catch (IOException ignored) {}
+            try { ChatLog.append(file, stamp, input, answer, source, System.currentTimeMillis()); } catch (IOException ignored) {}
         });
     }
     private static Activity host() { Activity host = activity.get(); return host != null && !host.isFinishing() ? host : null; }

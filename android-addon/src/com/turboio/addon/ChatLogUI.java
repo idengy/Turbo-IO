@@ -17,7 +17,7 @@ final class ChatLogUI {
     static void show(Activity a) {
         EditorialUI.Screen s = new EditorialUI.Screen(a, "问答对话");
         LinearLayout b = s.body;
-        b.addView(EditorialUI.text(a, "最近 24 小时通过语音助手和自有模型的问答，最新的在上；超过 24 小时的自动删掉。官方助手自己回答的、「开始盯盘」这类本地指令不记。", 14, EditorialUI.MUTED));
+        b.addView(EditorialUI.text(a, "最近 24 小时的语音问答，最新的在上；超过 24 小时的自动删掉。自有模型和官方助手回答的都记；「开始盯盘」这类本地指令、拍照导航这类设备控制不记。", 14, EditorialUI.MUTED));
         TextView state = EditorialUI.text(a, "读取中…", 14, EditorialUI.LIME);
         b.addView(state);
         File file = TurboAddon.conversations();
@@ -44,7 +44,7 @@ final class ChatLogUI {
         state.setText(es.isEmpty() ? "最近 24 小时没有问答" : "最近 24 小时共 " + es.size() + " 轮");
         for (ChatLog.Entry e : es) {
             LinearLayout c = EditorialUI.card(a, list);
-            c.addView(EditorialUI.text(a, e.stamp, 12, EditorialUI.MUTED));
+            c.addView(EditorialUI.text(a, e.stamp + " · " + (ChatLog.OFFICIAL.equals(e.source) ? "官方助手" : "自有模型"), 12, EditorialUI.MUTED));
             TextView q = EditorialUI.text(a, e.question.isEmpty() ? "(无问题文本)" : e.question, 16, EditorialUI.LIME);
             q.setTypeface(null, Typeface.BOLD);
             q.setTextIsSelectable(true);  // r37:问题也要能长按复制(r35 只给了回答)

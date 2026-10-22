@@ -17,7 +17,8 @@
 - [x] Bill 签名安装 r35,点「导出录音转写」;adb pull 两个库(global / user_<uid>,各 1 MB,`local/work/isar/`)
 - **Isar 分析结论(2026-10-22)**:user 库只有 `CachedSessionApiItem`(录音 id = recordSync 文件名、AI 标题如「香料去腥技巧解析」、时间)、日程/任务/提词器/定位等表,**没有任何转写正文**;原生层 SQLite 库(google/networkkit/umeng 等)也无转写。转写应来自云端 `/session/detail`(另有 `/transcription/submitTask|updateResult`);App 还用 Hive(`.hive`),可能缓存详情,r35 没复制。
 - [ ] 待 Bill:先试官方 App 录音详情页的「分享转写」(代码有 `shareTranscription`)。够用 → r36 删「导出录音转写」按钮;不够 → r36 复制 `.hive` + 私有目录清单再分析;最后手段 = 插件调 `/session/detail`(需逆向鉴权/签名,脆弱)
-- [ ] 实机验收:开关关→录→开不进随记;问答对话页与分享
+- [x] 实机验收(2026-10-22):开关关→录→开,关闭期间的录音没进随记 ✅
+- [ ] 实机验收:问答对话页与分享
 
 **当前任务(2026-10-20 Bill 定,方案 ~/.claude/plans/jaunty-exploring-kettle.md):期货盯盘模式(秒级)**——业务 19 文字通道(`NavGlasses`)上眼镜行情、约 1 s 一帧,每页 6 行(可调 5/6/7)、超过一页网关轮播;手机添加 ≤12 个合约(r10 前 ≤5);每行「名称 最新价 涨跌幅」;手机按钮 + 眼镜语音「开始/停止盯盘」;1 h 会话自动续开;后台靠 `BackgroundWork`。三层:futures-kb `kb stream`(常驻天勤会话推 JSON 行)→ 网关 `/v1/watch/stream` SSE(拉起/复用/回收子进程、限频、心跳、**排版**)→ 插件 `WatchController/WatchUI/WatchVoice`。
 **现状 2026-10-21(晚)**:手机装 **r28**(guarded-unsigned `4d52e2b4…`,签名包见 SUMS),眼镜 TMIG1;盯盘/背单词/微信读书(TXT+MD、书架管理)均实机可用;眼镜按键已接上:长按 = 停止、背单词转旋钮 = 回上一个词、盯盘转旋钮 = 暂停/恢复翻页(短按不报手机,不可用);官方实时字幕接管后可直接重开;Mac 端 Clash 已改规则模式 + Tailscale 直连,5G 下手机主动连 Mac 正常,网关保活默认暂停。未专项验:55 min 续期、盯盘后台。

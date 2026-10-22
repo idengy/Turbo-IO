@@ -6,7 +6,7 @@
 - [x] 插件 `TranscriptExports` 重写(剪贴板取链接 → 网关 → 存 md → 系统分享;最近 20 个可再分享;删 r35 Isar 复制)
 - [x] build exit 0 → package → guarded → verify exit 0 → **r36 guarded-unsigned `8f119a0ce91c4489b82535c6e169d45de0f5e446b26dc3567904e1b4394d4180`**(dex `3f84b23b…`,SUMS 已记;r35 产物改名 `*.r35-20261022`,r34 APK 删)
 - [x] 两份 Isar 副本(Mac `local/work/isar/`、手机 `Android/data/…/turboio-isar/`)已删(2026-10-22 Bill 定);Bill 已装 r36
-- [ ] Bill 安装实测:短录音 + 长会议录音,分享到微信/飞书
+- [x] Bill 安装实测(2026-10-22):短录音 + 长会议录音都能导出并分享 ✅
 
 **r35(2026-10-21 Bill 定,方案 ~/.claude/plans/tranquil-wishing-shamir.md)**:语音备忘开关「关闭期间的录音永不进随记」+ 开关移到首页;设置页删两个导出按钮;首页「问答对话 ›」(conversations.md 滚动 24 h、查看、分享);首页「导出录音转写 ›」第一步 = 复制官方 Isar 库副本供分析(r36 做真正导出)。
 - [x] MemoPolicy/MemoForwarder 开关语义 + 单测(MemoTest 20 过;ffmpeg 合成 48 kHz 双声道 37.5 s opus,`oggDurationMs`=37506 ms,与 ffprobe 一致)

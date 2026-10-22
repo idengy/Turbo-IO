@@ -390,17 +390,17 @@ public final class TurboAddon {
             MAIN.post(() -> emit(token, "", true, safe));
         } finally { if (http != null) { http.disconnect(); if(connection == http) connection = null; } }
     }
+    /** 问答存档文件;IO 线程写,ChatLogUI 读。 */
+    static File conversations() { return new File(new File(app.getFilesDir(), "turboio_android"), "conversations.md"); }
+    static java.util.concurrent.Executor io() { return IO; }
     private static void archive(String input, String answer) {
         String stamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT).format(new Date());
         IO.execute(() -> {
             File folder = new File(app.getFilesDir(), "turboio_android");
             if (!folder.isDirectory() && !folder.mkdirs()) return;
-            File file = new File(folder, "conversations.md");
-            // Bounded research archive. Never overwrite old conversations on limit.
-            if (file.length() > 8*1024*1024) return;
-            try (Writer writer = new OutputStreamWriter(new FileOutputStream(file, true), StandardCharsets.UTF_8)) {
-                writer.write("\n## " + stamp + "\n\n### 用户\n\n" + input + "\n\n### Turbo IO\n\n" + answer + "\n");
-            } catch (IOException ignored) {}
+            File file = conversations();
+            // bill 分支 r35:只留最近 24 小时、循环滚动(原上游 8 MB 后停写),首页「问答对话」查看与分享
+            try { ChatLog.append(file, stamp, input, answer, System.currentTimeMillis()); } catch (IOException ignored) {}
         });
     }
     private static Activity host() { Activity host = activity.get(); return host != null && !host.isFinishing() ? host : null; }

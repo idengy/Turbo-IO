@@ -29,6 +29,31 @@ public final class MemoPolicy {
         return null;
     }
 
+    /** 兜底:读不出时长时,开关打开后这么久内同步到的录音也算关闭期间录的(r35)。 */
+    public static final long UNKNOWN_DURATION_GRACE_MS = 10 * 60_000L;
+
+    /** Ogg Opus 文件尾部字节 → 时长毫秒(最后一页的 granule position,Opus 恒为 48 kHz);认不出返回 -1。
+     *  只要尾部 64 KB:Ogg 页最大约 64 KB,最后一页的页头一定在里面。 */
+    public static long oggDurationMs(byte[] tail) {
+        if (tail == null) return -1;
+        for (int i = tail.length - 27; i >= 0; i--) {
+            if (tail[i] != 'O' || tail[i + 1] != 'g' || tail[i + 2] != 'g' || tail[i + 3] != 'S' || tail[i + 4] != 0) continue;
+            long g = 0;
+            for (int b = 7; b >= 0; b--) g = (g << 8) | (tail[i + 6 + b] & 0xff);
+            return g > 0 ? g / 48 : -1;   // 48 个采样 = 1 ms
+        }
+        return -1;
+    }
+
+    /** 关闭开关期间录的?(r35,2026-10-21 Bill 定:开会前关掉,打开后这段录音也不能进随记)
+     *  打开那一刻已有的录音在 enable 时整体记为已处理;这里管打开之后才同步到的:估算开始时间 = 同步完成时间 − 时长,早于打开时刻就算。
+     *  从没关过(onAt ≤ 0)不拦。时长未知时退而看同步时间是否落在打开后 10 分钟内。 */
+    public static boolean recordedWhileOff(long mtime, long durationMs, long onAt) {
+        if (onAt <= 0) return false;
+        if (durationMs < 0) return mtime < onAt + UNKNOWN_DURATION_GRACE_MS;
+        return mtime - durationMs < onAt;
+    }
+
     /** 第 n 次失败后的补传等待(1、2、5、10、30 分钟封顶);只在宿主进程活着时由 Handler 排程,不轮询目录。 */
     public static long retryDelay(int failures) {
         return RETRY_MS[Math.max(0, Math.min(failures - 1, RETRY_MS.length - 1))];

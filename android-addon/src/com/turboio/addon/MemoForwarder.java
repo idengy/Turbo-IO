@@ -44,12 +44,23 @@ final class MemoForwarder {
         MAIN.removeCallbacks(rescan); MAIN.postDelayed(rescan, RESCAN_MS);
     }
     static boolean enabled() { return prefs != null && prefs.getBoolean("enabled", true); }
+    /** r35(2026-10-21 Bill 定):关 = 关闭期间录的永不进随记(开会前关掉)。打开时先把目录里已有的全部记为已处理,
+     *  再记下打开时刻 onAt;打开后才同步到、但估算开始时间早于 onAt 的,由 consider() 里 recordedWhileOff 拦下。 */
     static void enabled(boolean on) {
-        prefs.edit().putBoolean("enabled", on).apply();
-        if (on) init(app); else { for (FileObserver o : observers) o.stopWatching(); observers.clear(); pending.clear(); retryAt.clear(); failures.clear(); MAIN.removeCallbacks(retry); note = "已关闭"; }
+        if (on) {
+            Set<String> d = done(); int n = 0;
+            for (File dir : dirs()) { File[] fs = dir.listFiles(); if (fs != null) for (File f : fs) { String id = MemoPolicy.memoId(f.getName()); if (id != null && d.add(id)) n++; } }
+            prefs.edit().putStringSet("done", d).putLong("onAt", System.currentTimeMillis()).putBoolean("enabled", true).apply();
+            Log.i(TAG, "enabled: " + n + " memos recorded while off marked done");
+            init(app);
+        } else {
+            prefs.edit().putBoolean("enabled", false).apply();
+            for (FileObserver o : observers) o.stopWatching(); observers.clear(); pending.clear(); retryAt.clear(); failures.clear(); MAIN.removeCallbacks(retry);
+            note = "已关闭";
+        }
     }
     static String status() {
-        if (!enabled()) return "语音备忘自动进随记：已关闭";
+        if (!enabled()) return "语音备忘自动进随记：已关闭 · 关闭期间录的不会进随记";
         return "语音备忘自动进随记：" + note + (pending.isEmpty() ? "" : " · 待传 " + pending.size()) + " · 已处理 " + done().size() + " 条";
     }
 
@@ -100,7 +111,11 @@ final class MemoForwarder {
             checking.remove(id);
             if (!f.isFile()) return;
             if (f.length() != size || size == 0) { consider(f); return; }
-            Log.i(TAG, "queued " + f.getName()); pending.put(id, f); drain();
+            long dur = MemoPolicy.oggDurationMs(tail(f));
+            if (MemoPolicy.recordedWhileOff(f.lastModified(), dur, prefs.getLong("onAt", 0))) {
+                Log.i(TAG, "skip: recorded while off " + f.getName() + " dur=" + dur + "ms"); markDone(id); return;
+            }
+            Log.i(TAG, "queued " + f.getName() + " dur=" + dur + "ms"); pending.put(id, f); drain();
         }, MemoPolicy.STABLE_MS);
     }
 
@@ -154,6 +169,13 @@ final class MemoForwarder {
         pending.remove(id); retryAt.remove(id); failures.remove(id); markDone(id);
         note = o == MemoPolicy.Outcome.DONE ? "最近一条已记入随记" : "最近一条被跳过（HTTP " + code + "）";
         drain();
+    }
+    /** 文件最后 64 KB(读 Ogg 最后一页的 granule 算时长);读不了返回 null。 */
+    private static byte[] tail(File f) {
+        try (RandomAccessFile r = new RandomAccessFile(f, "r")) {
+            long len = r.length(); int n = (int) Math.min(len, 65536); byte[] b = new byte[n];
+            r.seek(len - n); r.readFully(b); return b;
+        } catch (IOException e) { return null; }
     }
     private static byte[] read(File f) throws IOException {
         try (InputStream in = new FileInputStream(f); ByteArrayOutputStream out = new ByteArrayOutputStream()) {

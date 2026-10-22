@@ -87,6 +87,8 @@ javac -encoding UTF-8 -source 8 -target 8 -d build/test src/com/turboio/addon/Wa
 java -cp build/test WatchTest
 javac -encoding UTF-8 -source 8 -target 8 -d build/test src/com/turboio/addon/MemoPolicy.java tests/MemoTest.java
 java -cp build/test MemoTest
+javac -encoding UTF-8 -source 8 -target 8 -d build/test src/com/turboio/addon/ChatLog.java tests/ChatLogTest.java
+java -cp build/test ChatLogTest
 javac -encoding UTF-8 -source 8 -target 8 -d build/test src/com/turboio/addon/MarkdownText.java tests/MarkdownTextTest.java
 java -cp build/test MarkdownTextTest
 javac -encoding UTF-8 -source 8 -target 8 -d build/test src/com/turboio/addon/NavCore.java src/com/turboio/addon/NavSimulation.java tests/NavSimulationTest.java

@@ -1,6 +1,14 @@
 # TODO
 
 ## 当前任务
+**r35(2026-10-21 Bill 定,方案 ~/.claude/plans/tranquil-wishing-shamir.md)**:语音备忘开关「关闭期间的录音永不进随记」+ 开关移到首页;设置页删两个导出按钮;首页「问答对话 ›」(conversations.md 滚动 24 h、查看、分享);首页「导出录音转写 ›」第一步 = 复制官方 Isar 库副本供分析(r36 做真正导出)。
+- [x] MemoPolicy/MemoForwarder 开关语义 + 单测(MemoTest 20 过;ffmpeg 合成 48 kHz 双声道 37.5 s opus,`oggDurationMs`=37506 ms,与 ffprobe 一致)
+- [x] ChatLog/ChatLogUI + archive 滚动 + 单测(ChatLogTest 9 过:24 h 边界、回答里的 `##` 小标题不切节、append 后剪、临时文件 rename)
+- [x] EditorialUI 首页/设置页改动 + `TranscriptExports`(复制官方 Isar 库副本)
+- [x] build exit 0(dex `c153d258…`)→ package → guarded → verify exit 0 → **r35 guarded-unsigned `acebaed6a571cd7f3fa01aa1ab02e0d9fc91918fe03aa428e58804ceff83a940`**(SUMS 已记;r34 产物改名 `*.r34-20261021`,r33 APK 删)
+- 背景(为什么「文字与转写文件导出」全是对话):它只扫 .md / 路径含 record|transcript 的 .txt,唯一扫到的是上游问答存档 `files/turboio_android/conversations.md`;官方转写是云端任务(`/transcription/submitTask`),本地缓存在 isar_plus 库(libisar.so 只有 MDBX 引擎,非 SQLite),不是文件
+- [ ] Bill 签名安装、实机验收;adb pull Isar 副本分析 → r36 方案
+
 **当前任务(2026-10-20 Bill 定,方案 ~/.claude/plans/jaunty-exploring-kettle.md):期货盯盘模式(秒级)**——业务 19 文字通道(`NavGlasses`)上眼镜行情、约 1 s 一帧,每页 6 行(可调 5/6/7)、超过一页网关轮播;手机添加 ≤12 个合约(r10 前 ≤5);每行「名称 最新价 涨跌幅」;手机按钮 + 眼镜语音「开始/停止盯盘」;1 h 会话自动续开;后台靠 `BackgroundWork`。三层:futures-kb `kb stream`(常驻天勤会话推 JSON 行)→ 网关 `/v1/watch/stream` SSE(拉起/复用/回收子进程、限频、心跳、**排版**)→ 插件 `WatchController/WatchUI/WatchVoice`。
 **现状 2026-10-21(晚)**:手机装 **r28**(guarded-unsigned `4d52e2b4…`,签名包见 SUMS),眼镜 TMIG1;盯盘/背单词/微信读书(TXT+MD、书架管理)均实机可用;眼镜按键已接上:长按 = 停止、背单词转旋钮 = 回上一个词、盯盘转旋钮 = 暂停/恢复翻页(短按不报手机,不可用);官方实时字幕接管后可直接重开;Mac 端 Clash 已改规则模式 + Tailscale 直连,5G 下手机主动连 Mac 正常,网关保活默认暂停。未专项验:55 min 续期、盯盘后台。
 - [x] P0 实机探针(2026-10-20 全部完成,结论见本条末尾):代码 + 构建 2026-10-19 完成——`NavGlasses` 关闭回执计数 + 字号可调;`WatchController.startTest/startProbe`;`WatchUI` 探针页;首页「期货盯盘 ›」;`sign_guarded.sh` 改从 audit.json 读 SHA。`build.sh` exit 0(dex `ce46ee90…`),**guarded-unsigned r3 `31502eb7…`** verify --guarded exit 0(SUMS 已记;r2 产物改名 `*.r2-20261019`)。r3 签名包 `1379e7a5…` 2026-10-20 10:34 装机。**实测 10:46:P0-1 `\n` 分行 ✅(5 行各占一行);P0-3 替换 ✅(数字原地变);P0-4 3 分钟 1 s/帧 ✅ 文字提交 180 / SDK完成 180,全程 ready;P0-5 关闭回执 1/0 ✅(type3 SDK 成功回调可用,续期设计成立);测试自动结束后眼镜回首页并闲置息屏属正常。** **P0-2 字号 2 每行 ≥19 格(「5」+18 汉字整行)✅ → 网关 WIDTH=19、COMPACT=0 保留 %;字号 1 不测。P0-3 替换探针 ✅ B 帧出现 A 行消失(整屏替换)。** **P0-6 实体键:短按面板不退(误碰安全);长按眼镜以官方字幕方式结束(提示「实时字幕已保存到手机」),面板消失但手机 phase 仍 ready、继续推帧 → 眼镜侧结束没有回 type3;r4 加入站帧类型计数诊断,靠手机/语音停。** **P0-7 官方语音助手:问「现在几点」后面板仍在、phase ready,语音与面板共存,未收到 type4。P0 全部完成 2026-10-20 11:0x。**原始清单:P0-1 `\n` 分行?P0-2 字号 2/1 每行几汉字?P0-3 替换还是追加?P0-4 3 min 1 s/帧不掉 uncertain?P0-5 停止后「关闭回执 1/0」?P0-6 眼镜按键?P0-7 官方语音助手对会话影响?P0-8 退后台基线

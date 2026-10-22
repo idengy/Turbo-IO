@@ -5,6 +5,7 @@ import android.content.SharedPreferences;
 import android.os.FileObserver;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.Log;
 import java.io.*;
 import java.net.HttpURLConnection;
@@ -25,7 +26,8 @@ final class MemoForwarder {
     private static final Map<String, File> pending = new LinkedHashMap<>();
     private static final Set<String> checking = new HashSet<>();
     private static boolean uploading;
-    private static int failures;
+    private static final Map<String, Long> retryAt = new HashMap<>();   // 每条录音自己的补传时间(elapsedRealtime)
+    private static final Map<String, Integer> failures = new HashMap<>();
     private static String note = "未开始";
     private static final Runnable retry = MemoForwarder::drain;
     private static final String TAG = "TurboIOMemo";
@@ -44,7 +46,7 @@ final class MemoForwarder {
     static boolean enabled() { return prefs != null && prefs.getBoolean("enabled", true); }
     static void enabled(boolean on) {
         prefs.edit().putBoolean("enabled", on).apply();
-        if (on) init(app); else { for (FileObserver o : observers) o.stopWatching(); observers.clear(); pending.clear(); MAIN.removeCallbacks(retry); note = "已关闭"; }
+        if (on) init(app); else { for (FileObserver o : observers) o.stopWatching(); observers.clear(); pending.clear(); retryAt.clear(); failures.clear(); MAIN.removeCallbacks(retry); note = "已关闭"; }
     }
     static String status() {
         if (!enabled()) return "语音备忘自动进随记：已关闭";
@@ -104,8 +106,12 @@ final class MemoForwarder {
 
     private static void drain() {
         if (uploading || pending.isEmpty() || !enabled()) return;
-        Map.Entry<String, File> next = pending.entrySet().iterator().next();
-        final String id = next.getKey(); final File f = next.getValue();
+        long now = SystemClock.elapsedRealtime();
+        final String id = MemoPolicy.next(new ArrayList<>(pending.keySet()), retryAt, now);
+        if (id == null) {  // 全在等补传:按最早那条排一次(catchUp 每 2 min 也会来,不再绕过退避)
+            MAIN.removeCallbacks(retry); MAIN.postDelayed(retry, Math.max(1000, Collections.min(retryAt.values()) - now)); return;
+        }
+        final File f = pending.get(id);
         final String url, key;
         try {
             url = WatchController.origin() + "/v1/memo?memo_id=" + id + "&filename=" + URLEncoder.encode(f.getName(), "UTF-8") + "&ts=" + f.lastModified();
@@ -120,7 +126,7 @@ final class MemoForwarder {
                 else {
                     byte[] body = read(f);
                     http = (HttpURLConnection) new URL(url).openConnection();
-                    http.setConnectTimeout(15000); http.setReadTimeout(400000); http.setInstanceFollowRedirects(false);  // 服务端转写最长约 5 分钟
+                    http.setConnectTimeout(15000); http.setReadTimeout(660000); http.setInstanceFollowRedirects(false);  // 网关等 suiji 最长 600 s(10 MB 约 14 分钟录音)
                     http.setDoOutput(true); http.setFixedLengthStreamingMode(body.length);
                     http.setRequestProperty("Authorization", "Bearer " + key); http.setRequestProperty("Content-Type", "application/octet-stream");
                     try (OutputStream o = http.getOutputStream()) { o.write(body); }
@@ -138,11 +144,14 @@ final class MemoForwarder {
         MemoPolicy.Outcome o = MemoPolicy.outcome(code);
         Log.i(TAG, "upload " + id + " -> " + code + " " + why + " " + o);
         if (o == MemoPolicy.Outcome.RETRY) {
-            failures++; long d = MemoPolicy.retryDelay(failures);
+            int n = failures.containsKey(id) ? failures.get(id) + 1 : 1; failures.put(id, n);
+            long d = MemoPolicy.retryDelay(n);
+            retryAt.put(id, SystemClock.elapsedRealtime() + d);
+            File f = pending.remove(id); if (f != null) pending.put(id, f);  // 挪到队尾,后面的录音先传
             note = "上传失败（" + (code > 0 ? "HTTP " + code : why) + "），" + d / 60000 + " 分钟后补传";
-            MAIN.removeCallbacks(retry); MAIN.postDelayed(retry, d); return;
+            drain(); return;
         }
-        failures = 0; pending.remove(id); markDone(id);
+        pending.remove(id); retryAt.remove(id); failures.remove(id); markDone(id);
         note = o == MemoPolicy.Outcome.DONE ? "最近一条已记入随记" : "最近一条被跳过（HTTP " + code + "）";
         drain();
     }

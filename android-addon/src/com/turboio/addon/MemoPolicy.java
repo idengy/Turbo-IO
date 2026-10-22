@@ -6,7 +6,7 @@ package com.turboio.addon;
 public final class MemoPolicy {
     public enum Outcome { DONE, SKIP, RETRY }
     public static final long STABLE_MS = 3000;                 // 文件大小连续不变这么久才算同步写完
-    public static final long MAX_BYTES = 2L * 1024 * 1024;     // 与网关 / suiji-bot 上限一致
+    public static final long MAX_BYTES = 10L * 1024 * 1024;    // 与网关 / suiji-bot 上限一致;48 kHz 双声道约 14 分钟(2026-10-21 由 2 MB 放大,2 MB 只够约 2 分 50 秒)
     public static final long BASELINE_AGE_MS = 30 * 60_000L;  // 首次开启时只把 30 分钟以前的录音当旧的(r33)
     private static final long[] RETRY_MS = {60_000, 120_000, 300_000, 600_000, 1_800_000};
 
@@ -21,6 +21,12 @@ public final class MemoPolicy {
         if (httpCode >= 200 && httpCode < 300) return Outcome.DONE;
         if (httpCode == 400 || httpCode == 413 || httpCode == 422) return Outcome.SKIP;
         return Outcome.RETRY;
+    }
+
+    /** 按入队顺序取第一条已到补传时间的录音(没到时间的不挡后面的,2026-10-21:失败那条留在队首曾把后面的录音全堵住);都没到返回 null。 */
+    public static String next(java.util.List<String> order, java.util.Map<String, Long> retryAt, long now) {
+        for (String id : order) { Long t = retryAt.get(id); if (t == null || t <= now) return id; }
+        return null;
     }
 
     /** 第 n 次失败后的补传等待(1、2、5、10、30 分钟封顶);只在宿主进程活着时由 Handler 排程,不轮询目录。 */

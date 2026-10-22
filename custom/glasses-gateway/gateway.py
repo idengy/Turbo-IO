@@ -27,7 +27,7 @@ import words  # noqa: E402  背单词排版与牌组(同目录)
 HOST, PORT = "127.0.0.1", int(os.environ.get("GATEWAY_PORT", "8650"))
 HERMES_HOST, HERMES_PORT = "127.0.0.1", int(os.environ.get("HERMES_PORT", "8642"))
 SUIJI_PORT = int(os.environ.get("SUIJI_PORT", "8001"))  # suiji-bot(随记机器人)本机端口,/v1/memo 转发到它的 POST /voice
-MEMO_MAX_BYTES = 2 * 1024 * 1024
+MEMO_MAX_BYTES = 10 * 1024 * 1024  # 2026-10-21 由 2 MB 放大:48 kHz 双声道约 14 分钟;与插件 MemoPolicy、suiji-bot 一致
 MEMO_DEBUG = Path(__file__).resolve().parents[2] / "local/config/memo-debug"  # 文件存在 = 另存收到的录音到 local/memo-debug/(排查转写,默认关)
 KB_ROOT = Path(os.environ.get("FUTURES_KB_ROOT", "/Users/dyb/PROJECT/futures-kb"))
 KB_PY = KB_ROOT / "venv/bin/python"
@@ -242,7 +242,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(401, {"error": {"message": "unauthorized"}})
         if length <= 0 or length > MEMO_MAX_BYTES:
             self.close_connection = True
-            return self._json(413 if length > MEMO_MAX_BYTES else 400, {"error": {"message": "音频为空或超过 2 MB"}})
+            return self._json(413 if length > MEMO_MAX_BYTES else 400, {"error": {"message": "音频为空或超过 10 MB"}})
         body = self.rfile.read(length)
         q = parse_qs(urlsplit(self.path).query)
         params = {k: q[k][0] for k in ("memo_id", "filename", "ts") if q.get(k)}
@@ -250,7 +250,7 @@ class Handler(BaseHTTPRequestHandler):
         if MEMO_DEBUG.exists() and re.fullmatch(r"[0-9a-f]{32}", params.get("memo_id", "")):
             d = MEMO_DEBUG.parents[1] / "memo-debug"; d.mkdir(exist_ok=True); (d / f"{params['memo_id']}.opus").write_bytes(body)
         try:
-            conn = http.client.HTTPConnection("127.0.0.1", SUIJI_PORT, timeout=360)  # apple 转写子进程上限 300 s + 起题
+            conn = http.client.HTTPConnection("127.0.0.1", SUIJI_PORT, timeout=600)  # 10 MB 录音:whisper + 校对 + 起题;插件等 660 s
             conn.request("POST", "/voice?" + urlencode(params), body=body, headers={"Content-Type": "application/octet-stream"})
             r = conn.getresponse(); payload = r.read(); status = r.status; conn.close()
         except OSError as e:

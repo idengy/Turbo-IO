@@ -21,6 +21,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import transcript  # noqa: E402  官方录音转写分享页 → md(同目录,r36)
 import watch  # noqa: E402  盯盘推流与排版(同目录)
 import words  # noqa: E402  背单词排版与牌组(同目录)
 
@@ -180,6 +181,24 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         url = urlsplit(self.path)
         path = url.path.rstrip("/")
+        if path.endswith("/v1/transcript"):  # r36:官方「分享转写」链接 → 无头 Chrome 渲染 → md(插件首页「导出录音转写」)
+            if not self._authorized():
+                return self._json(401, {"error": {"message": "unauthorized"}})
+            share = parse_qs(url.query).get("url", [""])[0].strip()
+            if not transcript.valid_url(share):
+                return self._json(400, {"error": {"message": "只支持官方分享转写链接 https://share.rayneo.cn/…"}})
+            t0 = time.time()
+            try:
+                d = transcript.fetch(share)
+            except transcript.RenderError as e:
+                log.warning("transcript %s failed: %s", share, e)
+                return self._json(502, {"error": {"message": str(e)}})
+            if not d["slices"]:
+                log.info("transcript %s: no slices (%.1fs)", share, time.time() - t0)
+                return self._json(422, {"error": {"message": "页面里没有转写内容(链接失效或转写还没完成)"}})
+            name, md = transcript.to_markdown(d, share)
+            log.info("transcript %s -> %s slices=%d chars=%d (%.1fs)", share, name, len(d["slices"]), len(md), time.time() - t0)
+            return self._json(200, {"filename": name, "title": d["title"], "slices": len(d["slices"]), "markdown": md})
         if path.endswith("/v1/words/status") or path.endswith("/v1/words/stream") or path.endswith("/v1/words/back"):
             if not self._authorized():
                 return self._json(401, {"error": {"message": "unauthorized"}})

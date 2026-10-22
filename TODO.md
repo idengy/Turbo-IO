@@ -16,7 +16,7 @@
 - 背景(为什么「文字与转写文件导出」全是对话):它只扫 .md / 路径含 record|transcript 的 .txt,唯一扫到的是上游问答存档 `files/turboio_android/conversations.md`;官方转写是云端任务(`/transcription/submitTask`),本地缓存在 isar_plus 库(libisar.so 只有 MDBX 引擎,非 SQLite),不是文件
 - [x] Bill 签名安装 r35,点「导出录音转写」;adb pull 两个库(global / user_<uid>,各 1 MB,`local/work/isar/`)
 - **Isar 分析结论(2026-10-22)**:user 库只有 `CachedSessionApiItem`(录音 id = recordSync 文件名、AI 标题如「香料去腥技巧解析」、时间)、日程/任务/提词器/定位等表,**没有任何转写正文**;原生层 SQLite 库(google/networkkit/umeng 等)也无转写。转写应来自云端 `/session/detail`(另有 `/transcription/submitTask|updateResult`);App 还用 Hive(`.hive`),可能缓存详情,r35 没复制。
-- [ ] 待 Bill:先试官方 App 录音详情页的「分享转写」(代码有 `shareTranscription`)。够用 → r36 删「导出录音转写」按钮;不够 → r36 复制 `.hive` + 私有目录清单再分析;最后手段 = 插件调 `/session/detail`(需逆向鉴权/签名,脆弱)
+- [x] 官方「分享转写」只给链接 → 改走 r36(网关无头 Chrome 渲染分享页 → md),不再需要 .hive 分析或调云端接口
 - [x] 实机验收(2026-10-22):开关关→录→开,关闭期间的录音没进随记 ✅
 - [x] 实机验收(2026-10-22):问答对话页能看到问答、能分享 ✅ → **r35 全部验收完成**
 

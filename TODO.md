@@ -1,6 +1,8 @@
 # TODO
 
 ## 当前任务
+**r37(2026-10-22)**:问答对话页问题(绿色)也可长按复制。`ChatLogUI` 一行;build/package/guarded/verify exit 0 → **r37 guarded-unsigned `235ba093a9ec37abda3bc51f15e2d1519c952ad47372fe7be36302fcb6185815`**(dex `8a6a593c…`,SUMS 已记;r36 产物改名 `*.r36-20261022`,r35 APK 删)。待 Bill 签名安装验收。
+
 **r36(2026-10-22 Bill 定,方案 ~/.claude/plans/tranquil-wishing-shamir.md)**:官方「分享转写」链接 → 网关无头 Chrome 渲染分享页 → md → 插件首页「导出录音转写」生成并系统分享(微信/飞书)。不复刻分享接口签名(安全策略拦下,也不该做)。
 - [x] 网关 `transcript.py` + `/v1/transcript` + 单测 5 过(合成 DOM);已 kickstart。实测 `4egIJUiY` 200(4 大纲 4 段,约 3.6 s)、非分享链接 400、无效短码 422
 - [x] 插件 `TranscriptExports` 重写(剪贴板取链接 → 网关 → 存 md → 系统分享;最近 20 个可再分享;删 r35 Isar 复制)

@@ -47,6 +47,7 @@ final class ChatLogUI {
             c.addView(EditorialUI.text(a, e.stamp, 12, EditorialUI.MUTED));
             TextView q = EditorialUI.text(a, e.question.isEmpty() ? "(无问题文本)" : e.question, 16, EditorialUI.LIME);
             q.setTypeface(null, Typeface.BOLD);
+            q.setTextIsSelectable(true);  // r37:问题也要能长按复制(r35 只给了回答)
             c.addView(q);
             String answer = MarkdownText.looksLikeMarkdown(e.answer) ? MarkdownText.convert(e.answer).text.trim() : e.answer;
             TextView t = EditorialUI.text(a, answer, 15, EditorialUI.INK);

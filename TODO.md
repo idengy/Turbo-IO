@@ -1,7 +1,7 @@
 # TODO
 
 ## 当前任务
-**r38(2026-10-22 Bill 定:官方助手的问答也要留)**:`TurboAddon.observeOfficial/flushOfficial` + `ChatLog` 来源区分(`OWN`/`OFFICIAL`、`merge`)+ 卡片标来源;含 r37(问题可复制)。ChatLogTest 12 过;build/package/guarded/verify exit 0 → **r38 guarded-unsigned `859c78a0ec149938a15c28a3992220b5c338a20e129466b85933175c29df518a`**(dex `e7ac3694…`,SUMS 已记;r37 `235ba093…` 未装即被取代、作废未留档,r36 产物仍为上一轮留档)。
+**r38(2026-10-22 Bill 定:官方助手的问答也要留)**:`TurboAddon.observeOfficial/flushOfficial` + `ChatLog` 来源区分(`OWN`/`OFFICIAL`、`merge`)+ 卡片标来源;含 r37(问题可复制)。ChatLogTest 12 过;build/package/guarded/verify exit 0 → **r38 guarded-unsigned `859c78a0ec149938a15c28a3992220b5c338a20e129466b85933175c29df518a`**(dex `e7ac3694…`,SUMS 已记;r37 `235ba093…` 未装即被取代、作废未留档,r36 产物仍为上一轮留档)。**2026-10-23 实机验收通过**:签名包 `53a8e2fa…`,Bill 问了一句官方自答、一句自有模型,问答对话两条都在、来源标签正确,问题可长按复制。
 - [ ] Bill 签名安装 → 问一句官方会自己答的(如天气)+ 一句走自有模型的 → 问答对话两条都在、标签对;logcat `TurboIOChat` 核对 Query/Answer/Finished 字段语义
 
 **r36(2026-10-22 Bill 定,方案 ~/.claude/plans/tranquil-wishing-shamir.md)**:官方「分享转写」链接 → 网关无头 Chrome 渲染分享页 → md → 插件首页「导出录音转写」生成并系统分享(微信/飞书)。不复刻分享接口签名(安全策略拦下,也不该做)。

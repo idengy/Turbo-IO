@@ -247,3 +247,59 @@ class SyncParseTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PauseMarkTest(unittest.TestCase):
+    def test_mark_first_line_only_when_fits(self):
+        got = words.mark_paused(["apple  /ap/\n苹果", "apple\n更多"])
+        self.assertEqual(got, ["apple  /ap/  停\n苹果", "apple  停\n更多"])
+        wide = "一" * words.WIDTH
+        self.assertEqual(words.mark_paused([wide + "\n二"]), [wide + "\n二"])  # 放不下不加,也不多占一行
+
+
+class WheelPauseStreamTest(unittest.TestCase):
+    """/v1/words/stream + /v1/words/back 端到端:转一下回上一个词并停住,再转一下从转旋钮时那个词接着放(2026-10-25)。"""
+    def setUp(self):
+        import http.server, threading
+        import gateway
+        self.tmp = tempfile.TemporaryDirectory(); root = pathlib.Path(self.tmp.name)
+        _book(root, [{"id": str(i), "word": f"w{i}", "phonetic": "", "trans": ["t"], "book": "b", "added": i} for i in range(5)])
+        self.old = (gateway.API_KEY, words.MIN_SECONDS)
+        gateway.API_KEY, words.MIN_SECONDS = "k", 1
+        gateway.Handler.deck, gateway.Handler.deck_lock = words.Deck(root), threading.Lock()
+        self.gw = gateway
+        self.srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), gateway.Handler)
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+        self.base = f"http://127.0.0.1:{self.srv.server_address[1]}"
+
+    def tearDown(self):
+        self.srv.shutdown(); self.srv.server_close()
+        self.gw.API_KEY, words.MIN_SECONDS = self.old
+        self.tmp.cleanup()
+
+    def _get(self, path):
+        import urllib.request
+        return urllib.request.urlopen(urllib.request.Request(self.base + path, headers={"Authorization": "Bearer k"}), timeout=10)
+
+    def test_toggle(self):
+        import queue, threading
+        frames = queue.Queue()
+        resp = self._get("/v1/words/stream?seconds=1")
+
+        def pump():
+            try:
+                for line in resp:
+                    if line.startswith(b"data: "):
+                        frames.put((time.time(), json.loads(line[6:])["text"]))
+            except (AttributeError, ValueError, OSError):  # 测试末尾 close 后读线程收尾
+                pass
+        threading.Thread(target=pump, daemon=True).start()
+        first = lambda: frames.get(timeout=5)[1].split("\n")[0]
+        self.assertEqual([first(), first()], ["w4", "w3"])  # 放到 w3
+        self._get("/v1/words/back").read()
+        self.assertEqual(first(), "w4  停")  # 回上一个词并标「停」
+        with self.assertRaises(queue.Empty):
+            frames.get(timeout=2.5)  # 停住:超过播放间隔也不换词
+        self._get("/v1/words/back").read()
+        self.assertEqual([first(), first()], ["w3", "w2"])  # 继续:重放转旋钮时的 w3,再往后
+        resp.close()

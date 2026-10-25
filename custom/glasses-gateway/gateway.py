@@ -147,7 +147,7 @@ class WatchControl:
 
 
 class WordsControl:
-    """一条背单词流的控制口:/v1/words/back 累加回看次数并唤醒流的等待。"""
+    """一条背单词流的控制口:/v1/words/back(眼镜转旋钮)累加次数并唤醒流的等待,流按「暂停/继续」切换处理。"""
     lock = threading.Lock()
     live: set = set()
 
@@ -206,7 +206,7 @@ class Handler(BaseHTTPRequestHandler):
             if path.endswith("/v1/words/status"):
                 with self.deck_lock:
                     return self._json(200, self.deck.status())
-            if path.endswith("/v1/words/back"):  # 眼镜转旋钮(插件转发):正在放的流回上一个词
+            if path.endswith("/v1/words/back"):  # 眼镜转旋钮(插件转发):播放中 → 回上一个词并停住;停住中 → 继续
                 with WordsControl.lock:
                     live = list(WordsControl.live)
                 for c in live:
@@ -365,35 +365,29 @@ class Handler(BaseHTTPRequestHandler):
         pending: list[tuple[str, int, int]] = []  # (text, index, total)
         commit: dict | None = None  # 当前词的游标改动,第一帧送出后提交
         replay = not probe
-        back_steps = 0  # >0 = 正在回看第几个之前的词;停手 BACK_PAUSE 秒后归 0,先重放转旋钮时正在显示的那个词再往后放
+        paused = False  # 转旋钮 = 切换:播放中转一下回上一个词并停住;停住时再转一下继续(2026-10-25 Bill 定)
         rulers = words.ruler_frames()
         ctl = WordsControl()
         with WordsControl.lock:
             WordsControl.live.add(ctl)
         try:
             while True:
-                backs = 0 if probe else ctl.take()
-                if backs:
-                    with self.deck_lock:
-                        got = None
-                        while backs and got is None:  # 历史不够就退到最早那个
-                            got = self.deck.back_entry(back_steps + backs)
-                            if got is None:
-                                backs -= 1
-                        if got is None and back_steps:  # 已退到最早那个:原地重放并重新计时
-                            got = self.deck.back_entry(back_steps)
-                    if got is not None:
-                        back_steps += backs
-                        entry, index, total = got
-                        pending, commit = [(fr, index, total) for fr in words.layout(entry)], None
-                        log.info("words back %d -> %s", back_steps, entry.get("word"))
+                if (0 if probe else ctl.take()):  # 一次取到多次(极快连转)只算一下
+                    if paused:
+                        paused, pending, commit, replay = False, [], None, True  # 停住期间不提交游标,current_id 仍是转旋钮时正在显示的词,从它接着放
+                        log.info("words resumed")
+                    else:
+                        with self.deck_lock:
+                            got = self.deck.back_entry(1) or self.deck.resume()  # 没有上一个就停在当前词
+                        if got is not None:
+                            paused = True
+                            entry, index, total = got
+                            pending, commit = [(fr, index, total) for fr in words.mark_paused(words.layout(entry))], None
+                            log.info("words paused at %s", entry.get("word"))
                 if not pending:
                     if probe:
                         pending = [(fr, i + 1, len(rulers)) for i, fr in enumerate(rulers)]
                     else:
-                        if back_steps:  # 回看结束:回看期间不提交游标,current_id 仍是转旋钮时正在显示的词,重放它(2026-10-21 Bill 定)
-                            replay = True
-                        back_steps = 0
                         try:
                             with self.deck_lock:
                                 got = self.deck.resume() if replay else None
@@ -415,8 +409,8 @@ class Handler(BaseHTTPRequestHandler):
                     with self.deck_lock:
                         self.deck.commit(commit)
                     commit = None
-                # 回看的词最后一帧停 BACK_PAUSE 秒;等待中收到回看立即处理
-                hold = words.BACK_PAUSE if back_steps and not pending else seconds
+                # 停住时最后一帧一直停到再转旋钮;等待中收到旋钮立即处理
+                hold = float("inf") if paused and not pending else seconds
                 waited = since_hb = 0.0
                 while waited < hold:
                     step = min(1.0, hold - waited)

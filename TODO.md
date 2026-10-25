@@ -1,6 +1,11 @@
 # TODO
 
 ## 当前任务
+**背单词旋钮改为「暂停/继续」切换(2026-10-25 Bill 定)**:播放中转一下 = 回上一个词并一直停住(首行标「停」),再转一下 = 从转旋钮时那个词接着放;取代 r22 的「回看停 15 s、连转往前退」。只改网关(`gateway._words`、`words.mark_paused/PAUSE_MARK`,删 `BACK_PAUSE`),插件照旧每转一下发 `/v1/words/back`,**不用重打 APK**。
+- [x] 网关改动 + 单测(46 过,含端到端 `WheelPauseStreamTest`:临时词库起本机服务,验证停住 2.5 s 不换词、继续先重放 w3 再 w2);已 kickstart 网关
+- [x] 文档同步:custom/README、CLAUDE.md;插件 `WordsUI` 帮助文案与 `WatchController` 状态行文字已改源码,随下一轮 APK 生效(当前装的 r38 仍显示「回看 ×N」,只是文字)
+- [ ] Bill 实机:背单词时转一下 → 上一个词带「停」不动;等 > 播放间隔仍不动;再转一下 → 回到刚才那个词并继续。另看停住超过 1 分钟眼镜面板是否被固件收掉
+
 **r38(2026-10-22 Bill 定:官方助手的问答也要留)**:`TurboAddon.observeOfficial/flushOfficial` + `ChatLog` 来源区分(`OWN`/`OFFICIAL`、`merge`)+ 卡片标来源;含 r37(问题可复制)。ChatLogTest 12 过;build/package/guarded/verify exit 0 → **r38 guarded-unsigned `859c78a0ec149938a15c28a3992220b5c338a20e129466b85933175c29df518a`**(dex `e7ac3694…`,SUMS 已记;r37 `235ba093…` 未装即被取代、作废未留档,r36 产物仍为上一轮留档)。**2026-10-23 实机验收通过**:签名包 `53a8e2fa…`,Bill 问了一句官方自答、一句自有模型,问答对话两条都在、来源标签正确,问题可长按复制。
 - [ ] Bill 签名安装 → 问一句官方会自己答的(如天气)+ 一句走自有模型的 → 问答对话两条都在、标签对;logcat `TurboIOChat` 核对 Query/Answer/Finished 字段语义
 

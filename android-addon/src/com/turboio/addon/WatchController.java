@@ -50,10 +50,10 @@ public final class WatchController {
         long now=SystemClock.elapsedRealtime();boolean same=now-lastWheel<1500;lastWheel=now;if(same||!rotate())return;
         pausedHint=!pausedHint;note=pausedHint?"旋钮：暂停翻页":"旋钮：恢复翻页";get("/v1/watch/pause","翻页切换失败");}
     private static int backs;private static boolean listening;private static long lastBack;
-    /** 通知网关回看;失败只记在状态行,不影响流。 */
+    /** 通知网关切换「停在上一个词 / 继续」(2026-10-25);失败只记在状态行,不影响流。 */
     private static void wordsBack(){
         long now=SystemClock.elapsedRealtime();if(now-lastBack<200)return;lastBack=now;  // 同一格的重复事件(实测真实两格间隔 ≥0.6 s)
-        backs++;note="旋钮回看 ×"+backs;get("/v1/words/back","回看失败");}
+        backs++;note=backs%2==1?"旋钮：停在上一个词":"旋钮：继续";get("/v1/words/back","旋钮切换失败");}
     /** 后台 GET 网关控制口;失败只记在状态行,不影响流。 */
     private static void get(String path,String failure){
         final String url,key;try{url=origin()+path;key=SecretStore.get(app);}catch(Exception e){return;}

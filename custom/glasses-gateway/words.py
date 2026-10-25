@@ -17,7 +17,7 @@ MAX_LINES = 5
 MAX_CHARS = 384       # NavCore.clip 上限
 MIN_SECONDS, MAX_SECONDS, DEFAULT_SECONDS = 3, 60, 6
 HEARTBEAT = 10.0
-BACK_PAUSE = 15        # 眼镜转旋钮回上一个词后停留秒数,期间再转继续往前退;停手满这么久先重放转旋钮时那个词再接着放(2026-10-21)
+PAUSE_MARK = "停"      # 转旋钮暂停时首行末尾的标记(2026-10-25 起旋钮 = 暂停/继续切换,取代 2026-10-21 的回看停 15 s)
 HISTORY = 50           # 回看最多退几个词
 
 # ---------- 音标字形 ----------
@@ -133,6 +133,16 @@ def layout(entry: dict, width: float = WIDTH, max_lines: int = MAX_LINES) -> lis
     while rest:
         frames.append("\n".join([word] + rest[:per])); rest = rest[per:]
     return [f[:MAX_CHARS] for f in frames]
+
+
+def mark_paused(frames: list[str], width: float = WIDTH) -> list[str]:
+    """每帧首行末尾加「停」;放不下就不加(不为它多占一行)。"""
+    out = []
+    for f in frames:
+        first, sep, rest = f.partition("\n")
+        tagged = f"{first}  {PAUSE_MARK}"
+        out.append((tagged + sep + rest)[:MAX_CHARS] if cells(tagged) <= width else f)
+    return out
 
 
 def ipa_probe_frame() -> str:

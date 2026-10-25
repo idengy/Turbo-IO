@@ -5,7 +5,7 @@ import android.app.*;import android.os.*;import android.widget.*;
 final class WordsUI {
  private static final int[] SECONDS={4,6,8,10,15};
  static void show(Activity a){EditorialUI.Screen s=new EditorialUI.Screen(a,"背单词");LinearLayout b=s.body;
-  b.addView(EditorialUI.text(a,"眼镜文字面板循环显示有道单词本：第 1 行单词与音标，其余行释义；释义长的词分成多帧。词库在 Mac 上用 youdao_sync.py 同步，网关记住看到哪个词，下次开始先重放最后那个词。眼镜上转一下旋钮（哪个方向都行）= 回到上一个词并停 15 秒，连转继续往前退，停手后接着放新词；长按旋钮 = 停止。面板会占满眼镜画面，期间音乐/阅读/导航不可用；会话每 55 分钟自动续开；退后台继续需在设置里开「后台运行」。",14,EditorialUI.MUTED));
+  b.addView(EditorialUI.text(a,"眼镜文字面板循环显示有道单词本：第 1 行单词与音标，其余行释义；释义长的词分成多帧。词库在 Mac 上用 youdao_sync.py 同步，网关记住看到哪个词，下次开始先重放最后那个词。眼镜上转一下旋钮（哪个方向都行）= 回到上一个词并停住（首行标「停」），再转一下从刚才那个词接着放；长按旋钮 = 停止。面板会占满眼镜画面，期间音乐/阅读/导航不可用；会话每 55 分钟自动续开；退后台继续需在设置里开「后台运行」。",14,EditorialUI.MUTED));
   TextView state=EditorialUI.text(a,"",14,EditorialUI.LIME);b.addView(state);
   EditorialUI.button(a,b,"开始背单词",true,()->run(a,WatchController.startWords(WatchController.wordsSeconds(),WatchController.wordsShuffle())));
   EditorialUI.button(a,b,"停止",false,()->WatchController.stop("用户停止"));
